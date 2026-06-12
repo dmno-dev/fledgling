@@ -156,6 +156,18 @@ For each target package:
 
 Both steps are skipped when already done. Placeholders are packed from a throwaway temp dir, so your real `package.json` files are never touched.
 
+## `fledgling sync` — reconcile trusted publishing
+
+Where the default command focuses on **new** packages (and hides already-published ones), `fledgling sync` is the opposite: it ensures **trusted publishing is set up on every package**, skipping the ones already configured.
+
+```sh
+fledgling sync            # plan: which packages need trust set up
+fledgling sync --yes      # apply
+fledgling sync "@scope/*" # a subset
+```
+
+Use it after changing your `fledgling` config, or to set up trust on packages that were published without it. (It uses the same config/flags as the main command.)
+
 ## Shell completions
 
 `fledgling` ships tab-completion (via [`@bomb.sh/tab`](https://github.com/bombshell-dev/tab)) that completes package names and flags. Install it for your shell:

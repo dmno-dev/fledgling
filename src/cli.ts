@@ -61,8 +61,8 @@ function buildSettings(values: Record<string, any>, config: FledglingConfig, rep
   };
 }
 
-/** Non-interactive path: a plan by default, applies with --yes. */
-function runPlain(values: Record<string, any>, selectors: string[]): number {
+/** Non-interactive path: a plan by default, applies with --yes. `sync` = trust-only over all packages. */
+function runPlain(values: Record<string, any>, selectors: string[], syncMode = false): number {
   const root = findWorkspaceRoot();
   const config = loadConfig(root);
   const discovered = discoverPackages(root);
@@ -90,7 +90,8 @@ function runPlain(values: Record<string, any>, selectors: string[]): number {
     return 1;
   }
 
-  console.log(`${dryRun ? pc.yellow('dry run') : pc.green('apply')} — ${pc.bold('fledgling')} · ${resolved.targets.length} package(s)\n`);
+  const label = syncMode ? 'sync trusted publishing' : pc.bold('fledgling');
+  console.log(`${dryRun ? pc.yellow('dry run') : pc.green('apply')} — ${label} · ${resolved.targets.length} package(s)\n`);
   const reporter: Reporter = {
     step: m => console.log('  ' + pc.green('✓') + ' ' + m),
     skip: m => console.log('  ' + pc.dim('· ' + m)),
@@ -98,26 +99,32 @@ function runPlain(values: Record<string, any>, selectors: string[]): number {
   };
   const sum = summarize(resolved.targets.map(t => processTarget(t, settings, reporter)));
 
+  const summary = syncMode
+    ? `trusted ${sum.trusted} (skipped ${sum.trustSkipped})`
+    : `claimed ${sum.claimed} (skipped ${sum.claimSkipped}), trusted ${sum.trusted} (skipped ${sum.trustSkipped})`;
   console.log(
-    `\n${dryRun ? pc.yellow('dry run complete') : pc.green('done')} — ` +
-      `claimed ${sum.claimed} (skipped ${sum.claimSkipped}), trusted ${sum.trusted} (skipped ${sum.trustSkipped})` +
+    `\n${dryRun ? pc.yellow('dry run complete') : pc.green('done')} — ${summary}` +
       (sum.failed ? pc.red(`, failed ${sum.failed}`) : ''),
   );
   if (dryRun) console.log(pc.dim('Re-run with --yes to apply (needs npm login + 2FA).'));
   return sum.failed > 0 ? 1 : 0;
 }
 
-const argv = process.argv.slice(2);
+const rawArgv = process.argv.slice(2);
 
 // `fledgling init` — interactive config setup, written to root package.json
-if (argv[0] === 'init') {
+if (rawArgv[0] === 'init') {
   process.exit(await runInit());
 }
 
 // shell completion (`fledgling complete …`) is handled by @bomb.sh/tab, before gunshi
-if (maybeHandleCompletion(argv)) {
+if (maybeHandleCompletion(rawArgv)) {
   process.exit(0);
 }
+
+// `fledgling sync` — reconcile trusted publishing across every package (trust only)
+const isSync = rawArgv[0] === 'sync';
+const argv = isSync ? rawArgv.slice(1) : rawArgv;
 
 await cli(
   argv,
@@ -128,6 +135,11 @@ await cli(
     async run(ctx) {
       const selectors = (ctx.positionals ?? []) as string[];
       const values = ctx.values as Record<string, any>;
+      if (isSync) {
+        const code = runPlain({ ...values, 'skip-publish': true }, selectors, true);
+        if (code) process.exitCode = code;
+        return;
+      }
       const interactive = !!process.stdout.isTTY && !values.yes && !values['dry-run'];
       const code = interactive ? await runWizard(values, selectors) : runPlain(values, selectors);
       if (code) process.exitCode = code;
