@@ -4,10 +4,11 @@ import pc from 'picocolors';
 import { maybeHandleCompletion } from './completion.js';
 import { findWorkspaceRoot, discoverPackages, detectRepo } from './workspace.js';
 import { npmWhoami } from './npm.js';
-import { resolveTargets, processTarget, summarize, validateTrustSettings, type Settings, type Reporter } from './core.js';
-import { loadConfig, type FledglingConfig, type Permission, type Provider } from './config.js';
+import { resolveTargets, processTarget, summarize, validateTrustSettings, buildSettings, type Reporter } from './core.js';
+import { loadConfig } from './config.js';
 import { runWizard } from './interactive.js';
 import { runInit } from './init.js';
+import { runSync } from './sync.js';
 
 const VERSION = '0.0.0';
 
@@ -37,32 +38,8 @@ const args = {
   'context-id': { type: 'string', multiple: true, description: '[config][circleci] context UUID (repeatable)' },
 } as const;
 
-/** Resolve a setting with precedence: CLI flag → fledgling config → built-in default. */
-function buildSettings(values: Record<string, any>, config: FledglingConfig, repo: string | undefined, dryRun: boolean): Settings {
-  return {
-    dryRun,
-    skipPublish: !!values['skip-publish'],
-    skipTrust: !!values['skip-trust'],
-    force: !!values.force,
-    provider: (values.provider ?? config.provider ?? 'github') as Provider,
-    permissions: (values.permissions ?? config.permissions ?? 'publish') as Permission,
-    registry: values.registry ?? config.registry,
-    repo,
-    workflow: values.workflow ?? config.workflow ?? 'release.yml',
-    env: values.env ?? config.environment,
-    orgId: values['org-id'] ?? config.orgId,
-    projectId: values['project-id'] ?? config.projectId,
-    pipelineDefinitionId: values['pipeline-definition-id'] ?? config.pipelineDefinitionId,
-    vcsOrigin: values['vcs-origin'] ?? config.vcsOrigin,
-    contextIds: values['context-id'] ?? config.contextIds,
-    version: values['placeholder-version'] ?? '0.0.0',
-    tag: values.tag,
-    otp: values.otp,
-  };
-}
-
-/** Non-interactive path: a plan by default, applies with --yes. `sync` = trust-only over all packages. */
-function runPlain(values: Record<string, any>, selectors: string[], syncMode = false): number {
+/** Non-interactive path: a plan by default, applies with --yes. */
+function runPlain(values: Record<string, any>, selectors: string[]): number {
   const root = findWorkspaceRoot();
   const config = loadConfig(root);
   const discovered = discoverPackages(root);
@@ -90,8 +67,7 @@ function runPlain(values: Record<string, any>, selectors: string[], syncMode = f
     return 1;
   }
 
-  const label = syncMode ? 'sync trusted publishing' : pc.bold('fledgling');
-  console.log(`${dryRun ? pc.yellow('dry run') : pc.green('apply')} — ${label} · ${resolved.targets.length} package(s)\n`);
+  console.log(`${dryRun ? pc.yellow('dry run') : pc.green('apply')} — ${pc.bold('fledgling')} · ${resolved.targets.length} package(s)\n`);
   const reporter: Reporter = {
     step: m => console.log('  ' + pc.green('✓') + ' ' + m),
     skip: m => console.log('  ' + pc.dim('· ' + m)),
@@ -99,11 +75,9 @@ function runPlain(values: Record<string, any>, selectors: string[], syncMode = f
   };
   const sum = summarize(resolved.targets.map(t => processTarget(t, settings, reporter)));
 
-  const summary = syncMode
-    ? `trusted ${sum.trusted} (skipped ${sum.trustSkipped})`
-    : `claimed ${sum.claimed} (skipped ${sum.claimSkipped}), trusted ${sum.trusted} (skipped ${sum.trustSkipped})`;
   console.log(
-    `\n${dryRun ? pc.yellow('dry run complete') : pc.green('done')} — ${summary}` +
+    `\n${dryRun ? pc.yellow('dry run complete') : pc.green('done')} — ` +
+      `claimed ${sum.claimed} (skipped ${sum.claimSkipped}), trusted ${sum.trusted} (skipped ${sum.trustSkipped})` +
       (sum.failed ? pc.red(`, failed ${sum.failed}`) : ''),
   );
   if (dryRun) console.log(pc.dim('Re-run with --yes to apply (needs npm login + 2FA).'));
@@ -136,7 +110,7 @@ await cli(
       const selectors = (ctx.positionals ?? []) as string[];
       const values = ctx.values as Record<string, any>;
       if (isSync) {
-        const code = runPlain({ ...values, 'skip-publish': true }, selectors, true);
+        const code = await runSync(values, selectors);
         if (code) process.exitCode = code;
         return;
       }

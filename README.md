@@ -158,11 +158,13 @@ Both steps are skipped when already done. Placeholders are packed from a throwaw
 
 ## `fledgling sync` — reconcile trusted publishing
 
-Where the default command focuses on **new** packages (and hides already-published ones), `fledgling sync` is the opposite: it ensures **trusted publishing is set up on every package**, skipping the ones already configured.
+Where the default command focuses on **new** packages (and hides already-published ones), `fledgling sync` is the opposite: it ensures **trusted publishing is set up on every package**.
+
+It authenticates, checks each package's actual trust status, shows you what's missing, and asks before configuring it:
 
 ```sh
-fledgling sync            # plan: which packages need trust set up
-fledgling sync --yes      # apply
+fledgling sync            # auth, check, then confirm + apply
+fledgling sync --yes      # skip the confirm
 fledgling sync "@scope/*" # a subset
 ```
 

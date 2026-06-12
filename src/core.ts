@@ -1,7 +1,7 @@
 import type { Pkg } from './workspace.js';
 import { discoverPackages, findWorkspaceRoot } from './workspace.js';
 import { packageExists, listTrust, revokeTrust, publishPlaceholder, configureTrust, type TrustOptions } from './npm.js';
-import type { Permission, Provider } from './config.js';
+import type { Permission, Provider, FledglingConfig } from './config.js';
 
 export interface Settings {
   dryRun: boolean;
@@ -47,7 +47,36 @@ export function validateTrustSettings(s: Settings): string | null {
   return null;
 }
 
-function toTrustOptions(s: Settings): TrustOptions {
+/** Resolve a setting with precedence: CLI flag → fledgling config → built-in default. */
+export function buildSettings(
+  values: Record<string, any>,
+  config: FledglingConfig,
+  repo: string | undefined,
+  dryRun: boolean,
+): Settings {
+  return {
+    dryRun,
+    skipPublish: !!values['skip-publish'],
+    skipTrust: !!values['skip-trust'],
+    force: !!values.force,
+    provider: (values.provider ?? config.provider ?? 'github') as Provider,
+    permissions: (values.permissions ?? config.permissions ?? 'publish') as Permission,
+    registry: values.registry ?? config.registry,
+    repo,
+    workflow: values.workflow ?? config.workflow ?? 'release.yml',
+    env: values.env ?? config.environment,
+    orgId: values['org-id'] ?? config.orgId,
+    projectId: values['project-id'] ?? config.projectId,
+    pipelineDefinitionId: values['pipeline-definition-id'] ?? config.pipelineDefinitionId,
+    vcsOrigin: values['vcs-origin'] ?? config.vcsOrigin,
+    contextIds: values['context-id'] ?? config.contextIds,
+    version: values['placeholder-version'] ?? '0.0.0',
+    tag: values.tag,
+    otp: values.otp,
+  };
+}
+
+export function toTrustOptions(s: Settings): TrustOptions {
   return {
     provider: s.provider,
     permissions: s.permissions,
