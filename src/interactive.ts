@@ -1,7 +1,7 @@
 import * as p from '@clack/prompts';
 import pc from 'picocolors';
 import { findWorkspaceRoot, discoverPackages, detectRepo, type Pkg } from './workspace.js';
-import { npmWhoami, publishedNames, trustReadable, npmWebLogin } from './npm.js';
+import { npmWhoami, publishedNames, trustReadable } from './npm.js';
 import {
   resolveTargets,
   processTarget,
@@ -193,14 +193,21 @@ export async function runWizard(values: Record<string, any>, selectors: string[]
     otp: values.otp,
   };
 
-  // trusted publishing needs a web session — log in if we can't read trust
-  if (apply && !skipTrust && !trustReadable(targets[0].name, registry)) {
-    p.log.warn('npm needs you to log in to manage trusted publishing.');
-    try {
-      npmWebLogin(registry);
-    } catch {
-      p.cancel(pc.red('npm login was cancelled or failed.'));
-      return 1;
+  // trusted publishing needs an OTP on 2FA accounts — ask if reads aren't working
+  if (apply && !skipTrust && !trustReadable(targets[0].name, registry, settings.otp)) {
+    for (let tries = 0; tries < 3; tries++) {
+      const code = await p.password({
+        message: 'npm one-time password (2FA code):',
+        validate: x => (/^\d{6,}$/.test((x ?? '').trim()) ? undefined : 'Enter your 6-digit code'),
+      });
+      if (cancelled(code)) return cancel();
+      settings.otp = String(code).trim();
+      if (trustReadable(targets[0].name, registry, settings.otp)) break;
+      p.log.error(pc.red('That code did not work.'));
+      if (tries === 2) {
+        p.cancel(pc.red('Could not authenticate.'));
+        return 1;
+      }
     }
   }
 

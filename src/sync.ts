@@ -1,7 +1,7 @@
 import * as p from '@clack/prompts';
 import pc from 'picocolors';
 import { findWorkspaceRoot, discoverPackages, detectRepo, type Pkg } from './workspace.js';
-import { npmWhoami, listTrust, configureTrust, trustReadable, npmWebLogin } from './npm.js';
+import { npmWhoami, listTrust, configureTrust, trustReadable } from './npm.js';
 import { resolveTargets, validateTrustSettings, buildSettings, toTrustOptions } from './core.js';
 import { loadConfig } from './config.js';
 
@@ -38,28 +38,36 @@ export async function runSync(values: Record<string, any>, selectors: string[]):
     return 1;
   }
 
-  // Managing trusted publishing needs a logged-in web session. `npm trust list`
-  // doesn't prompt for OTP — it just errors — so log in up front if we can't read.
-  if (!trustReadable(targets[0].name, settings.registry)) {
-    p.log.warn('npm needs you to log in to manage trusted publishing.');
-    try {
-      npmWebLogin(settings.registry);
-    } catch {
-      p.cancel(pc.red('npm login was cancelled or failed.'));
-      return 1;
-    }
-    if (!trustReadable(targets[0].name, settings.registry)) {
-      p.cancel(pc.red('Still not authenticated. Try `npm login` manually, then re-run.'));
-      return 1;
+  // `npm trust` needs an OTP on 2FA accounts (and it doesn't prompt — it errors).
+  // Ask for one if reads aren't working without it.
+  let otp = settings.otp;
+  if (!trustReadable(targets[0].name, settings.registry, otp)) {
+    for (let tries = 0; tries < 3; tries++) {
+      const code = await p.password({
+        message: 'npm one-time password (2FA code):',
+        validate: x => (/^\d{6,}$/.test((x ?? '').trim()) ? undefined : 'Enter your 6-digit code'),
+      });
+      if (p.isCancel(code)) {
+        p.cancel('Cancelled.');
+        return 1;
+      }
+      otp = String(code).trim();
+      if (trustReadable(targets[0].name, settings.registry, otp)) break;
+      p.log.error(pc.red('That code did not work.'));
+      if (tries === 2) {
+        p.cancel(pc.red('Could not authenticate.'));
+        return 1;
+      }
     }
   }
+  settings.otp = otp;
   const who = npmWhoami() ?? 'npm';
 
   p.log.step(`Checking trusted publishing for ${pc.bold(String(targets.length))} package(s) as ${pc.green(who)}…`);
   const needsSetup: Pkg[] = [];
   let configured = 0;
   for (const t of targets) {
-    if (listTrust(t.name, settings.registry).length) configured++;
+    if (listTrust(t.name, settings.registry, otp).length) configured++;
     else needsSetup.push(t);
   }
 

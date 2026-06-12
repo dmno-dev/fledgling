@@ -81,6 +81,7 @@ export function toTrustOptions(s: Settings): TrustOptions {
     provider: s.provider,
     permissions: s.permissions,
     registry: s.registry,
+    otp: s.otp,
     dryRun: s.dryRun,
     repo: s.repo,
     workflow: s.workflow,
@@ -186,8 +187,8 @@ export function processTarget(t: Pkg, s: Settings, report: Reporter): TargetResu
     if (!exists && !s.dryRun) {
       report.skip(`${t.name} — trust skipped (name not on npm yet)`);
     } else {
-      // Needs an authenticated session (ensured upstream); dry-run is best-effort.
-      const existing = listTrust(t.name, s.registry);
+      // Needs auth + OTP (ensured upstream); dry-run is best-effort.
+      const existing = listTrust(t.name, s.registry, s.otp);
       if (existing.length && !s.force) {
         report.skip(`${t.name} — trust already configured (use --force to replace)`);
         result.trust = 'skip';
@@ -203,7 +204,7 @@ export function processTarget(t: Pkg, s: Settings, report: Reporter): TargetResu
         try {
           // npm allows one config per package — revoke the existing one before replacing
           if (s.force && existing.length) {
-            for (const e of existing) if (e.id) revokeTrust(t.name, e.id, s.registry);
+            for (const e of existing) if (e.id) revokeTrust(t.name, e.id, s.registry, s.otp);
           }
           configureTrust(t.name, toTrustOptions(s));
           result.trust = 'done';

@@ -18,6 +18,7 @@ export interface TrustOptions {
   provider: Provider;
   permissions: Permission;
   registry?: string;
+  otp?: string;
   dryRun: boolean;
   // github / gitlab
   repo?: string; // owner/repo (github) or group/project (gitlab)
@@ -80,14 +81,19 @@ export async function publishedNames(names: string[], registry?: string, concurr
   return found;
 }
 
+function withOtp(args: string[], otp?: string): string[] {
+  if (otp) args.push(`--otp=${otp}`);
+  return args;
+}
+
 /**
  * Existing trusted-publisher configs (npm allows at most one per package).
- * Requires an authenticated session — see {@link trustReadable}/{@link npmWebLogin}.
- * Returns `[]` if it can't read (unauthenticated or no config).
+ * `npm trust list` needs auth + (on 2FA accounts) an OTP — it does NOT prompt,
+ * it just errors. Pass `otp`. Returns `[]` if it can't read (or no config).
  */
-export function listTrust(name: string, registry?: string): TrustEntry[] {
+export function listTrust(name: string, registry?: string, otp?: string): TrustEntry[] {
   try {
-    const out = execFileSync('npm', withRegistry(['trust', 'list', name, '--json'], registry), {
+    const out = execFileSync('npm', withOtp(withRegistry(['trust', 'list', name, '--json'], registry), otp), {
       stdio: ['ignore', 'pipe', 'ignore'],
       encoding: 'utf8',
     }).trim();
@@ -99,29 +105,20 @@ export function listTrust(name: string, registry?: string): TrustEntry[] {
   }
 }
 
-export function trustConfigured(name: string, registry?: string): boolean {
-  return listTrust(name, registry).length > 0;
+export function trustConfigured(name: string, registry?: string, otp?: string): boolean {
+  return listTrust(name, registry, otp).length > 0;
 }
 
-/**
- * Whether trust configs are readable right now (i.e. we're authenticated).
- * `npm trust list` requires a logged-in web session — it does NOT prompt for
- * OTP interactively, it just errors. So we probe with one quiet call.
- */
-export function trustReadable(name: string, registry?: string): boolean {
+/** Whether trust configs are readable right now (auth + OTP valid). Probes with one quiet call. */
+export function trustReadable(name: string, registry?: string, otp?: string): boolean {
   try {
-    execFileSync('npm', withRegistry(['trust', 'list', name, '--json'], registry), {
+    execFileSync('npm', withOtp(withRegistry(['trust', 'list', name, '--json'], registry), otp), {
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     return true;
   } catch {
     return false;
   }
-}
-
-/** Run npm's interactive web login (prints a URL / opens a browser). Throws on failure. */
-export function npmWebLogin(registry?: string): void {
-  execFileSync('npm', withRegistry(['login', '--auth-type=web'], registry), { stdio: 'inherit' });
 }
 
 /** Publish a package.json-only placeholder from a throwaway dir (claims the name). */
@@ -157,11 +154,12 @@ export function configureTrust(name: string, opts: TrustOptions): void {
   if (opts.permissions === 'publish' || opts.permissions === 'both') args.push('--allow-publish');
   if (opts.permissions === 'stage' || opts.permissions === 'both') args.push('--allow-stage-publish');
   withRegistry(args, opts.registry);
+  withOtp(args, opts.otp);
   args.push(opts.dryRun ? '--dry-run' : '-y');
   execFileSync('npm', args, { stdio: 'inherit' });
 }
 
 /** Revoke a trusted-publisher config by id (used by --force to replace one). */
-export function revokeTrust(name: string, id: string, registry?: string): void {
-  execFileSync('npm', withRegistry(['trust', 'revoke', name, `--id=${id}`], registry), { stdio: 'inherit' });
+export function revokeTrust(name: string, id: string, registry?: string, otp?: string): void {
+  execFileSync('npm', withOtp(withRegistry(['trust', 'revoke', name, `--id=${id}`], registry), otp), { stdio: 'inherit' });
 }
