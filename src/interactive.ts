@@ -46,36 +46,58 @@ export async function runWizard(values: Record<string, any>, selectors: string[]
     }
     targets = resolved.targets;
     if (selectors.length === 0 && targets.length > 1) {
-      // figure out which are already on npm, so we only pre-select the ones that need claiming
+      const onlyTrust = !!values['skip-publish'];
       const checkSpin = p.spinner();
       checkSpin.start('Checking which packages are already on npm');
       const published = await publishedNames(
         targets.map(t => t.name),
         registry,
       );
-      checkSpin.stop(
-        published.size
-          ? `${published.size} of ${targets.length} already on npm`
-          : `none of ${targets.length} on npm yet`,
-      );
       const fresh = targets.filter(t => !published.has(t.name));
-      const ordered = [...targets].sort((a, b) => Number(published.has(a.name)) - Number(published.has(b.name)));
-      if (fresh.length && published.size) {
-        p.log.info(pc.dim('Already-published packages are unselected — pick any to (re)configure trust.'));
+      checkSpin.stop(`${published.size} of ${targets.length} already on npm`);
+
+      const pick = async (pool: Pkg[], message: string): Promise<Pkg[] | null> => {
+        if (pool.length === 1) return pool;
+        const picked = await p.multiselect({
+          message,
+          options: pool.map(t => ({
+            value: t.name,
+            label: t.name,
+            hint: published.has(t.name) ? 'on npm' : 'new',
+          })),
+          initialValues: pool.map(t => t.name),
+          required: true,
+        });
+        if (cancelled(picked)) return null;
+        const set = new Set(picked as string[]);
+        return pool.filter(t => set.has(t.name));
+      };
+
+      if (onlyTrust) {
+        // trust-only: publish status isn't the filter — let the user pick from all
+        const picked = await pick(targets, 'Which packages?');
+        if (!picked) return cancel();
+        targets = picked;
+      } else if (fresh.length === 0) {
+        // nothing new to claim — don't list 20 done packages, just ask
+        const verify = await p.confirm({
+          message: `All ${targets.length} packages are already on npm. Re-check trusted publishing for them?`,
+          initialValue: false,
+        });
+        if (cancelled(verify)) return cancel();
+        if (!verify) {
+          p.outro(pc.green('Nothing to claim — all set 🐣'));
+          return 0;
+        }
+      } else {
+        // show only the new ones; hide the already-published
+        if (published.size) {
+          p.log.info(pc.dim(`${published.size} already on npm — hidden. Name one explicitly to (re)configure its trust.`));
+        }
+        const picked = await pick(fresh, 'New packages to set up:');
+        if (!picked) return cancel();
+        targets = picked;
       }
-      const picked = await p.multiselect({
-        message: 'Which packages?',
-        options: ordered.map(t => ({
-          value: t.name,
-          label: t.name,
-          hint: published.has(t.name) ? 'on npm' : 'new',
-        })),
-        initialValues: (fresh.length ? fresh : targets).map(t => t.name),
-        required: true,
-      });
-      if (cancelled(picked)) return cancel();
-      const set = new Set(picked as string[]);
-      targets = targets.filter(t => set.has(t.name));
     }
   }
 
