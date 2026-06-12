@@ -67,6 +67,24 @@ npx fledgling init
 }
 ```
 
+**CircleCI** uses IDs instead of a workflow/repo:
+
+```jsonc
+{
+  "fledgling": {
+    "provider": "circleci",
+    "orgId": "…",
+    "projectId": "…",
+    "pipelineDefinitionId": "…",
+    "vcsOrigin": "github/owner/repo",
+    "contextIds": ["…"],        // optional
+    "permissions": "publish"
+  }
+}
+```
+
+Add `"registry"` to either block to target a non-default npm registry.
+
 ### Defaults
 
 | Option | Default | Notes |
@@ -76,6 +94,9 @@ npx fledgling init
 | `workflow` | `release.yml` | the workflow whose job publishes |
 | `environment` | **none** | Optional and **unset by default** — the trusted publisher then isn't tied to a CI environment (it works, but adds no environment gate). Setting one (e.g. `publish`) is recommended for security, and `fledgling init` pre-fills it. |
 | `permissions` | `publish` | `publish`, `stage` (held for 2FA approval), or `both` |
+| `registry` | _your npm config_ | optional custom npm registry URL |
+
+**CircleCI** uses `orgId`, `projectId`, `pipelineDefinitionId`, `vcsOrigin`, and optional `contextIds` instead of `repo`/`workflow`/`environment`.
 
 Precedence is **CLI flag → `fledgling` config → built-in default**.
 
@@ -103,6 +124,7 @@ npx fledgling @scope/brand-new --new --yes   # claim a name that doesn't exist l
 | `--new` | Treat unmatched names as brand-new packages to claim (squat a name) |
 | `--skip-publish` | Only set up trusted publishing |
 | `--skip-trust` | Only claim names |
+| `--force` | Replace an existing trusted publisher (revoke + re-create) |
 | `--placeholder-version <v>` | Placeholder version (default: `0.0.0`) |
 | `--tag <tag>` | dist-tag for placeholders (default: `latest`) |
 | `--otp <code>` | npm one-time password |
@@ -114,17 +136,23 @@ Better set once in `package.json` (see [Configuration](#configuration)); as flag
 | Flag | Config key | Default |
 |------|-----------|---------|
 | `--provider <p>` | `provider` | `github` |
+| `--permissions <p>` | `permissions` | `publish` |
+| `--registry <url>` | `registry` | _npm config_ |
 | `--repo <owner/repo>` | _(auto-detected)_ | git `origin` |
 | `--workflow <file>` | `workflow` | `release.yml` |
 | `--env <name>` | `environment` | none |
-| `--permissions <p>` | `permissions` | `publish` |
+| `--org-id <uuid>` | `orgId` | _(circleci)_ |
+| `--project-id <uuid>` | `projectId` | _(circleci)_ |
+| `--pipeline-definition-id <uuid>` | `pipelineDefinitionId` | _(circleci)_ |
+| `--vcs-origin <origin>` | `vcsOrigin` | _(circleci)_ |
+| `--context-id <uuid>` | `contextIds` | _(circleci, repeatable)_ |
 
 ## What it does, precisely
 
 For each target package:
 
 1. **Claim** — if the name isn't on npm yet, publish a `package.json`-only placeholder (`0.0.0`, no code) to reserve it.
-2. **Trust** — if there's no trusted publisher configured, set one up for your CI provider via `npm trust`.
+2. **Trust** — if there's no trusted publisher configured, set one up for your CI provider via `npm trust` (or replace an existing one with `--force`). Supports **GitHub, GitLab, and CircleCI**, with every option `npm trust` accepts.
 
 Both steps are skipped when already done. Placeholders are packed from a throwaway temp dir, so your real `package.json` files are never touched.
 

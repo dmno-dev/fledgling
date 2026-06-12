@@ -1,20 +1,75 @@
 import type { Pkg } from './workspace.js';
 import { discoverPackages, findWorkspaceRoot } from './workspace.js';
-import { packageExists, trustConfigured, publishPlaceholder, configureTrust } from './npm.js';
-import type { Permission } from './config.js';
+import {
+  packageExists,
+  trustConfigured,
+  listTrust,
+  revokeTrust,
+  publishPlaceholder,
+  configureTrust,
+  type TrustOptions,
+} from './npm.js';
+import type { Permission, Provider } from './config.js';
 
 export interface Settings {
   dryRun: boolean;
   skipPublish: boolean;
   skipTrust: boolean;
+  force: boolean;
   version: string;
   tag?: string;
   otp?: string;
-  provider: 'github' | 'gitlab' | 'circleci';
+  provider: Provider;
+  permissions: Permission;
+  registry?: string;
+  // github / gitlab
   repo?: string;
   workflow: string;
   env?: string;
-  permissions: Permission;
+  // circleci
+  orgId?: string;
+  projectId?: string;
+  pipelineDefinitionId?: string;
+  vcsOrigin?: string;
+  contextIds?: string[];
+}
+
+/** Validate provider-specific trust requirements. Returns an error message or null. */
+export function validateTrustSettings(s: Settings): string | null {
+  if (s.skipTrust) return null;
+  if (s.provider === 'circleci') {
+    const missing = ([
+      ['org-id', s.orgId],
+      ['project-id', s.projectId],
+      ['pipeline-definition-id', s.pipelineDefinitionId],
+      ['vcs-origin', s.vcsOrigin],
+    ] as const)
+      .filter(([, v]) => !v)
+      .map(([k]) => `--${k}`);
+    if (missing.length) {
+      return `CircleCI needs ${missing.join(', ')} (set them via \`fledgling init\` or flags, or use --skip-trust).`;
+    }
+    return null;
+  }
+  if (!s.repo) return 'Cannot determine the repo. Pass --repo <owner/repo> (or --skip-trust).';
+  return null;
+}
+
+function toTrustOptions(s: Settings): TrustOptions {
+  return {
+    provider: s.provider,
+    permissions: s.permissions,
+    registry: s.registry,
+    dryRun: s.dryRun,
+    repo: s.repo,
+    workflow: s.workflow,
+    env: s.env,
+    orgId: s.orgId,
+    projectId: s.projectId,
+    pipelineDefinitionId: s.pipelineDefinitionId,
+    vcsOrigin: s.vcsOrigin,
+    contextIds: s.contextIds,
+  };
 }
 
 export type StepStatus = 'done' | 'skip' | 'fail' | 'na';
@@ -82,7 +137,7 @@ export function resolveTargets(discovered: Pkg[], selectors: string[], isNew: bo
 /** Claim + trust one package. Reports progress; returns a structured result. */
 export function processTarget(t: Pkg, s: Settings, report: Reporter): TargetResult {
   const result: TargetResult = { name: t.name, claim: 'na', trust: 'na' };
-  let exists = packageExists(t.name);
+  let exists = packageExists(t.name, s.registry);
 
   if (!s.skipPublish) {
     if (exists) {
@@ -90,7 +145,12 @@ export function processTarget(t: Pkg, s: Settings, report: Reporter): TargetResu
       result.claim = 'skip';
     } else {
       try {
-        publishPlaceholder(placeholderManifest(t, s.version), { dryRun: s.dryRun, otp: s.otp, tag: s.tag });
+        publishPlaceholder(placeholderManifest(t, s.version), {
+          dryRun: s.dryRun,
+          otp: s.otp,
+          tag: s.tag,
+          registry: s.registry,
+        });
         result.claim = 'done';
         if (!s.dryRun) exists = true;
         report.step(`${t.name} — ${s.dryRun ? 'would claim' : 'claimed'} @${s.version}`);
@@ -104,21 +164,23 @@ export function processTarget(t: Pkg, s: Settings, report: Reporter): TargetResu
   if (!s.skipTrust) {
     if (!exists && !s.dryRun) {
       report.skip(`${t.name} — trust skipped (name not on npm yet)`);
-    } else if (trustConfigured(t.name)) {
-      report.skip(`${t.name} — trust already configured`);
+    } else if (trustConfigured(t.name, s.registry) && !s.force) {
+      report.skip(`${t.name} — trust already configured (use --force to replace)`);
       result.trust = 'skip';
     } else {
       try {
-        configureTrust(t.name, {
-          provider: s.provider,
-          repo: s.repo!,
-          workflow: s.workflow,
-          env: s.env,
-          permissions: s.permissions,
-          dryRun: s.dryRun,
-        });
+        const replacing = trustConfigured(t.name, s.registry);
+        // Skip the actual npm calls on a dry-run replace (don't revoke; avoid "already exists").
+        if (!(replacing && s.dryRun)) {
+          if (replacing) {
+            // npm allows one config per package — revoke the existing one first
+            for (const e of listTrust(t.name, s.registry)) if (e.id) revokeTrust(t.name, e.id, s.registry);
+          }
+          configureTrust(t.name, toTrustOptions(s));
+        }
         result.trust = 'done';
-        report.step(`${t.name} — ${s.dryRun ? 'would configure' : 'configured'} trust`);
+        const verb = replacing ? (s.dryRun ? 'would replace' : 'replaced') : s.dryRun ? 'would configure' : 'configured';
+        report.step(`${t.name} — ${verb} trust`);
       } catch (e) {
         report.fail(`${t.name} — trust failed: ${(e as Error).message}`);
         result.trust = 'fail';

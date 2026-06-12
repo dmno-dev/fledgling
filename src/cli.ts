@@ -4,8 +4,8 @@ import pc from 'picocolors';
 import { maybeHandleCompletion } from './completion.js';
 import { findWorkspaceRoot, discoverPackages, detectRepo } from './workspace.js';
 import { npmWhoami } from './npm.js';
-import { resolveTargets, processTarget, summarize, type Settings, type Reporter } from './core.js';
-import { loadConfig, type FledglingConfig, type Permission } from './config.js';
+import { resolveTargets, processTarget, summarize, validateTrustSettings, type Settings, type Reporter } from './core.js';
+import { loadConfig, type FledglingConfig, type Permission, type Provider } from './config.js';
 import { runWizard } from './interactive.js';
 import { runInit } from './init.js';
 
@@ -18,16 +18,23 @@ const args = {
   new: { type: 'boolean', description: 'Treat unmatched names as brand-new packages to claim' },
   'skip-publish': { type: 'boolean', description: 'Only set up trusted publishing' },
   'skip-trust': { type: 'boolean', description: 'Only claim names' },
+  force: { type: 'boolean', description: 'Replace an existing trusted publisher (revoke + re-create)' },
   'placeholder-version': { type: 'string', default: '0.0.0', description: 'Placeholder version to publish' },
   tag: { type: 'string', description: 'dist-tag for placeholders' },
   otp: { type: 'string', description: 'npm one-time password' },
   // config — best set once in package.json "fledgling" (run `fledgling init`); flags override.
   // No gunshi defaults here, so config can fill them in.
   provider: { type: 'string', description: '[config] CI provider: github (default), gitlab, circleci' },
-  repo: { type: 'string', description: '[config] trusted-publisher repo (default: auto-detected from git origin)' },
-  workflow: { type: 'string', description: '[config] publishing workflow filename (default: release.yml)' },
-  env: { type: 'string', description: '[config] CI environment for the trusted publisher (default: none)' },
+  registry: { type: 'string', description: '[config] npm registry URL (default: your npm config)' },
   permissions: { type: 'string', description: '[config] permissions to grant: publish (default), stage, both' },
+  repo: { type: 'string', description: '[config][github/gitlab] repo (default: auto-detected from git origin)' },
+  workflow: { type: 'string', description: '[config][github/gitlab] publishing workflow filename (default: release.yml)' },
+  env: { type: 'string', description: '[config][github/gitlab] CI environment (default: none)' },
+  'org-id': { type: 'string', description: '[config][circleci] organization UUID' },
+  'project-id': { type: 'string', description: '[config][circleci] project UUID' },
+  'pipeline-definition-id': { type: 'string', description: '[config][circleci] pipeline definition UUID' },
+  'vcs-origin': { type: 'string', description: '[config][circleci] VCS origin, e.g. github/owner/repo' },
+  'context-id': { type: 'string', multiple: true, description: '[config][circleci] context UUID (repeatable)' },
 } as const;
 
 /** Resolve a setting with precedence: CLI flag → fledgling config → built-in default. */
@@ -36,14 +43,21 @@ function buildSettings(values: Record<string, any>, config: FledglingConfig, rep
     dryRun,
     skipPublish: !!values['skip-publish'],
     skipTrust: !!values['skip-trust'],
-    provider: (values.provider ?? config.provider ?? 'github') as Settings['provider'],
+    force: !!values.force,
+    provider: (values.provider ?? config.provider ?? 'github') as Provider,
+    permissions: (values.permissions ?? config.permissions ?? 'publish') as Permission,
+    registry: values.registry ?? config.registry,
     repo,
     workflow: values.workflow ?? config.workflow ?? 'release.yml',
     env: values.env ?? config.environment,
+    orgId: values['org-id'] ?? config.orgId,
+    projectId: values['project-id'] ?? config.projectId,
+    pipelineDefinitionId: values['pipeline-definition-id'] ?? config.pipelineDefinitionId,
+    vcsOrigin: values['vcs-origin'] ?? config.vcsOrigin,
+    contextIds: values['context-id'] ?? config.contextIds,
     version: values['placeholder-version'] ?? '0.0.0',
     tag: values.tag,
     otp: values.otp,
-    permissions: (values.permissions ?? config.permissions ?? 'publish') as Permission,
   };
 }
 
@@ -65,8 +79,10 @@ function runPlain(values: Record<string, any>, selectors: string[]): number {
   }
 
   const dryRun = !values.yes;
-  if (!values['skip-trust'] && !repo) {
-    console.error(pc.red('Cannot determine the repo. Pass --repo <owner/repo> (or --skip-trust).'));
+  const settings = buildSettings(values, config, repo, dryRun);
+  const trustError = validateTrustSettings(settings);
+  if (trustError) {
+    console.error(pc.red(trustError));
     return 1;
   }
   if (!dryRun && !npmWhoami()) {
@@ -80,7 +96,6 @@ function runPlain(values: Record<string, any>, selectors: string[]): number {
     skip: m => console.log('  ' + pc.dim('· ' + m)),
     fail: m => console.error('  ' + pc.red('✗') + ' ' + m),
   };
-  const settings = buildSettings(values, config, repo, dryRun);
   const sum = summarize(resolved.targets.map(t => processTarget(t, settings, reporter)));
 
   console.log(

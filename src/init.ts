@@ -1,7 +1,19 @@
 import * as p from '@clack/prompts';
 import pc from 'picocolors';
 import { findWorkspaceRoot, detectRepo } from './workspace.js';
-import { loadConfig, writeConfig, type FledglingConfig, type Permission } from './config.js';
+import { loadConfig, writeConfig, type FledglingConfig, type Permission, type Provider } from './config.js';
+
+const CANCEL = Symbol('cancel');
+/** Prompt for required text; returns the trimmed value or CANCEL. */
+async function ask(message: string, initialValue?: string, required = true): Promise<string | typeof CANCEL> {
+  const v = await p.text({
+    message,
+    initialValue,
+    validate: required ? x => (x?.trim() ? undefined : 'Required') : undefined,
+  });
+  if (p.isCancel(v)) return CANCEL;
+  return String(v ?? '').trim();
+}
 
 /** `fledgling init` — interactively write the `"fledgling"` config into root package.json. */
 export async function runInit(): Promise<number> {
@@ -18,24 +30,36 @@ export async function runInit(): Promise<number> {
     options: [
       { value: 'github', label: 'GitHub Actions' },
       { value: 'gitlab', label: 'GitLab CI/CD' },
-      { value: 'circleci', label: 'CircleCI', hint: 'configured manually for now' },
+      { value: 'circleci', label: 'CircleCI' },
     ],
     initialValue: existing.provider ?? 'github',
   });
   if (p.isCancel(provider)) return cancel();
 
-  const workflow = await p.text({
-    message: 'Publishing workflow filename:',
-    initialValue: existing.workflow ?? 'release.yml',
-    validate: v => (v?.trim() ? undefined : 'Required'),
-  });
-  if (p.isCancel(workflow)) return cancel();
+  const config: FledglingConfig = { provider: provider as Provider };
 
-  const environment = await p.text({
-    message: 'CI environment (blank for none):',
-    initialValue: existing.environment ?? 'publish',
-  });
-  if (p.isCancel(environment)) return cancel();
+  if (provider === 'circleci') {
+    const orgId = await ask('CircleCI org id (UUID):', existing.orgId);
+    if (orgId === CANCEL) return cancel();
+    const projectId = await ask('CircleCI project id (UUID):', existing.projectId);
+    if (projectId === CANCEL) return cancel();
+    const pipelineDefinitionId = await ask('CircleCI pipeline definition id (UUID):', existing.pipelineDefinitionId);
+    if (pipelineDefinitionId === CANCEL) return cancel();
+    const vcsOrigin = await ask('VCS origin (e.g. github/owner/repo):', existing.vcsOrigin);
+    if (vcsOrigin === CANCEL) return cancel();
+    const contexts = await ask('Context UUIDs (comma-separated, blank for none):', existing.contextIds?.join(','), false);
+    if (contexts === CANCEL) return cancel();
+    Object.assign(config, { orgId, projectId, pipelineDefinitionId, vcsOrigin });
+    const ids = contexts.split(',').map(s => s.trim()).filter(Boolean);
+    if (ids.length) config.contextIds = ids;
+  } else {
+    const workflow = await ask('Publishing workflow filename:', existing.workflow ?? 'release.yml');
+    if (workflow === CANCEL) return cancel();
+    const environment = await ask('CI environment (blank for none):', existing.environment ?? 'publish', false);
+    if (environment === CANCEL) return cancel();
+    config.workflow = workflow;
+    if (environment) config.environment = environment;
+  }
 
   const permissions = await p.select({
     message: 'Publish permissions to grant:',
@@ -47,13 +71,11 @@ export async function runInit(): Promise<number> {
     initialValue: existing.permissions ?? 'publish',
   });
   if (p.isCancel(permissions)) return cancel();
+  config.permissions = permissions as Permission;
 
-  const config: FledglingConfig = {
-    provider: provider as FledglingConfig['provider'],
-    workflow: String(workflow).trim(),
-    ...(String(environment).trim() ? { environment: String(environment).trim() } : {}),
-    permissions: permissions as Permission,
-  };
+  const registry = await ask('Custom npm registry (blank for default):', existing.registry, false);
+  if (registry === CANCEL) return cancel();
+  if (registry) config.registry = registry;
 
   const file = writeConfig(root, config);
   p.note(JSON.stringify({ fledgling: config }, null, 2), 'Saved');

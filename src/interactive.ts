@@ -10,7 +10,7 @@ import {
   type Reporter,
   type TargetResult,
 } from './core.js';
-import { loadConfig, type Permission } from './config.js';
+import { loadConfig, type Permission, type Provider } from './config.js';
 
 const cancelled = (v: unknown): boolean => p.isCancel(v);
 
@@ -60,18 +60,25 @@ export async function runWizard(values: Record<string, any>, selectors: string[]
   // --- phases / trust settings (flag → config → default) ---
   const skipPublish = !!values['skip-publish'];
   let skipTrust = !!values['skip-trust'];
+  const provider = (values.provider ?? config.provider ?? 'github') as Provider;
+  const permissions = (values.permissions ?? config.permissions ?? 'publish') as Permission;
+  const registry: string | undefined = values.registry ?? config.registry;
   let repo: string | undefined = values.repo ?? repoInfo?.slug;
-  const provider = (values.provider ?? config.provider ?? 'github') as Settings['provider'];
   const workflow: string = values.workflow ?? config.workflow ?? 'release.yml';
   const env: string | undefined = values.env ?? config.environment;
-  const permissions = (values.permissions ?? config.permissions ?? 'publish') as Permission;
+  // circleci
+  let orgId: string | undefined = values['org-id'] ?? config.orgId;
+  let projectId: string | undefined = values['project-id'] ?? config.projectId;
+  let pipelineDefinitionId: string | undefined = values['pipeline-definition-id'] ?? config.pipelineDefinitionId;
+  let vcsOrigin: string | undefined = values['vcs-origin'] ?? config.vcsOrigin;
+  const contextIds: string[] | undefined = values['context-id'] ?? config.contextIds;
 
   if (!skipTrust) {
     const wantsTrust = await p.confirm({ message: 'Set up trusted publishing (OIDC)?', initialValue: true });
     if (cancelled(wantsTrust)) return cancel();
     skipTrust = !wantsTrust;
   }
-  if (!skipTrust && !repo) {
+  if (!skipTrust && provider !== 'circleci' && !repo) {
     const r = await p.text({
       message: 'Repo for the trusted publisher (owner/repo):',
       placeholder: 'me/my-repo',
@@ -80,15 +87,31 @@ export async function runWizard(values: Record<string, any>, selectors: string[]
     if (cancelled(r)) return cancel();
     repo = String(r).trim();
   }
+  if (!skipTrust && provider === 'circleci') {
+    const fields: [string, () => string | undefined, (v: string) => void][] = [
+      ['CircleCI org id', () => orgId, v => (orgId = v)],
+      ['CircleCI project id', () => projectId, v => (projectId = v)],
+      ['CircleCI pipeline definition id', () => pipelineDefinitionId, v => (pipelineDefinitionId = v)],
+      ['CircleCI VCS origin (e.g. github/owner/repo)', () => vcsOrigin, v => (vcsOrigin = v)],
+    ];
+    for (const [label, get, set] of fields) {
+      if (get()) continue;
+      const v = await p.text({ message: `${label}:`, validate: x => (x?.trim() ? undefined : 'Required') });
+      if (cancelled(v)) return cancel();
+      set(String(v).trim());
+    }
+  }
 
   // --- plan + confirm ---
+  const trustLine =
+    provider === 'circleci'
+      ? `• circleci trusted publishing → ${vcsOrigin} · ${permissions}`
+      : `• ${provider} trusted publishing → ${repo} · ${workflow}${env ? ` · env ${env}` : ''} · ${permissions}`;
   p.note(
     [
       `${pc.bold(String(targets.length))} package(s): ${pc.dim(targets.map(t => t.name).join(', '))}`,
       skipPublish ? '' : pc.green('• claim unpublished names on npm'),
-      skipTrust
-        ? ''
-        : pc.green(`• ${provider} trusted publishing → ${repo} · ${workflow}${env ? ` · env ${env}` : ''} · ${permissions}`),
+      skipTrust ? '' : pc.green(trustLine),
       skipTrust ? '' : pc.dim('  (configure these defaults with `fledgling init`)'),
     ]
       .filter(Boolean)
@@ -110,14 +133,21 @@ export async function runWizard(values: Record<string, any>, selectors: string[]
     dryRun: !apply,
     skipPublish,
     skipTrust,
+    force: !!values.force,
     provider,
+    permissions,
+    registry,
     repo,
     workflow,
     env,
+    orgId,
+    projectId,
+    pipelineDefinitionId,
+    vcsOrigin,
+    contextIds,
     version: values['placeholder-version'] ?? '0.0.0',
     tag: values.tag,
     otp: values.otp,
-    permissions,
   };
 
   const reporter: Reporter = {

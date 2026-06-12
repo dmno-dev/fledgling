@@ -4,12 +4,23 @@ import { join } from 'node:path';
 /** npm trusted-publisher permissions to grant. */
 export type Permission = 'publish' | 'stage' | 'both';
 
+export type Provider = 'github' | 'gitlab' | 'circleci';
+
 /** Persisted config, read from the `"fledgling"` key of the root package.json. */
 export interface FledglingConfig {
-  provider?: 'github' | 'gitlab' | 'circleci';
+  provider?: Provider;
+  permissions?: Permission;
+  /** custom npm registry (defaults to the configured/default registry) */
+  registry?: string;
+  // github / gitlab
   workflow?: string;
   environment?: string;
-  permissions?: Permission;
+  // circleci (all required when provider is circleci)
+  orgId?: string;
+  projectId?: string;
+  pipelineDefinitionId?: string;
+  vcsOrigin?: string;
+  contextIds?: string[];
 }
 
 export function loadConfig(root: string): FledglingConfig {

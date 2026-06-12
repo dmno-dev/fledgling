@@ -6,13 +6,20 @@ const FLAGS: [string, string][] = [
   ['--new', 'claim brand-new names not in the repo'],
   ['--skip-publish', 'only set up trusted publishing'],
   ['--skip-trust', 'only claim names'],
+  ['--force', 'replace an existing trusted publisher'],
   ['--dry-run', 'print a plan without prompting'],
-  ['--repo', 'trusted-publisher repo (owner/repo)'],
-  ['--workflow', 'publishing workflow filename'],
-  ['--env', 'CI environment'],
   ['--placeholder-version', 'placeholder version'],
   ['--tag', 'dist-tag for placeholders'],
   ['--otp', 'npm one-time password'],
+  ['--registry', 'npm registry URL'],
+  ['--repo', 'trusted-publisher repo (owner/repo)'],
+  ['--workflow', 'publishing workflow filename'],
+  ['--env', 'CI environment'],
+  ['--org-id', 'CircleCI organization UUID'],
+  ['--project-id', 'CircleCI project UUID'],
+  ['--pipeline-definition-id', 'CircleCI pipeline definition UUID'],
+  ['--vcs-origin', 'CircleCI VCS origin (github/owner/repo)'],
+  ['--context-id', 'CircleCI context UUID (repeatable)'],
 ];
 
 function defineCompletions(): void {
