@@ -12,20 +12,22 @@ import { runInit } from './init.js';
 const VERSION = '0.0.0';
 
 const args = {
+  // run options (per invocation)
   yes: { type: 'boolean', short: 'y', description: 'Apply changes without prompting (default: interactive / dry run)' },
   'dry-run': { type: 'boolean', description: 'Print a plan without prompts (non-interactive)' },
   new: { type: 'boolean', description: 'Treat unmatched names as brand-new packages to claim' },
   'skip-publish': { type: 'boolean', description: 'Only set up trusted publishing' },
   'skip-trust': { type: 'boolean', description: 'Only claim names' },
-  // no gunshi defaults on these — so the `fledgling` config can fill them in
-  provider: { type: 'string', description: 'CI provider: github (default), gitlab, circleci' },
-  repo: { type: 'string', description: 'Trusted-publisher repo (auto-detected from git origin)' },
-  workflow: { type: 'string', description: 'Publishing workflow filename (default: release.yml)' },
-  env: { type: 'string', description: 'CI environment for the trusted publisher' },
-  permissions: { type: 'string', description: 'Permissions to grant: publish (default), stage, both' },
   'placeholder-version': { type: 'string', default: '0.0.0', description: 'Placeholder version to publish' },
   tag: { type: 'string', description: 'dist-tag for placeholders' },
   otp: { type: 'string', description: 'npm one-time password' },
+  // config — best set once in package.json "fledgling" (run `fledgling init`); flags override.
+  // No gunshi defaults here, so config can fill them in.
+  provider: { type: 'string', description: '[config] CI provider: github (default), gitlab, circleci' },
+  repo: { type: 'string', description: '[config] trusted-publisher repo (default: auto-detected from git origin)' },
+  workflow: { type: 'string', description: '[config] publishing workflow filename (default: release.yml)' },
+  env: { type: 'string', description: '[config] CI environment for the trusted publisher (default: none)' },
+  permissions: { type: 'string', description: '[config] permissions to grant: publish (default), stage, both' },
 } as const;
 
 /** Resolve a setting with precedence: CLI flag → fledgling config → built-in default. */

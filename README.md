@@ -48,6 +48,37 @@ npx fledgling --yes        # apply: claim names + configure trusted publishing
 
 Then add the matching publish step to your CI (e.g. a GitHub Actions job with `permissions: id-token: write` running `npm publish`). Your real releases now publish over OIDC — no token required.
 
+## Configuration
+
+**The recommended way to configure `fledgling` is a `"fledgling"` block in your root `package.json`.** Set it once and every run reads it — CLI flags are just per-run overrides. Create it interactively:
+
+```sh
+npx fledgling init
+```
+
+```jsonc
+{
+  "fledgling": {
+    "provider": "github",       // github | gitlab | circleci
+    "workflow": "release.yml",  // the workflow whose job runs `npm publish`
+    "environment": "publish",   // CI environment for the trusted publisher (optional)
+    "permissions": "publish"    // publish | stage | both
+  }
+}
+```
+
+### Defaults
+
+| Option | Default | Notes |
+|--------|---------|-------|
+| `provider` | `github` | also `gitlab`, `circleci` |
+| `repo` | _auto-detected_ from git `origin` | override with `--repo` |
+| `workflow` | `release.yml` | the workflow whose job publishes |
+| `environment` | **none** | Optional and **unset by default** — the trusted publisher then isn't tied to a CI environment (it works, but adds no environment gate). Setting one (e.g. `publish`) is recommended for security, and `fledgling init` pre-fills it. |
+| `permissions` | `publish` | `publish`, `stage` (held for 2FA approval), or `both` |
+
+Precedence is **CLI flag → `fledgling` config → built-in default**.
+
 ## Usage
 
 ```sh
@@ -63,7 +94,7 @@ npx fledgling "*-plugin" --yes          # all the plugins
 npx fledgling @scope/brand-new --new --yes   # claim a name that doesn't exist locally yet
 ```
 
-### Options
+### Run options
 
 | Flag | Description |
 |------|-------------|
@@ -72,14 +103,21 @@ npx fledgling @scope/brand-new --new --yes   # claim a name that doesn't exist l
 | `--new` | Treat unmatched names as brand-new packages to claim (squat a name) |
 | `--skip-publish` | Only set up trusted publishing |
 | `--skip-trust` | Only claim names |
-| `--provider <p>` | CI provider: `github` (default), `gitlab`, `circleci` |
-| `--repo <owner/repo>` | Trusted-publisher repo (auto-detected from your git `origin`) |
-| `--workflow <file>` | Publishing workflow filename (default: `release.yml`) |
-| `--env <name>` | CI environment for the trusted publisher |
 | `--placeholder-version <v>` | Placeholder version (default: `0.0.0`) |
 | `--tag <tag>` | dist-tag for placeholders (default: `latest`) |
 | `--otp <code>` | npm one-time password |
-| `--permissions <p>` | Permissions to grant: `publish` (default), `stage`, or `both` |
+
+### Config flags
+
+Better set once in `package.json` (see [Configuration](#configuration)); as flags they override the config for that run.
+
+| Flag | Config key | Default |
+|------|-----------|---------|
+| `--provider <p>` | `provider` | `github` |
+| `--repo <owner/repo>` | _(auto-detected)_ | git `origin` |
+| `--workflow <file>` | `workflow` | `release.yml` |
+| `--env <name>` | `environment` | none |
+| `--permissions <p>` | `permissions` | `publish` |
 
 ## What it does, precisely
 
@@ -89,29 +127,6 @@ For each target package:
 2. **Trust** — if there's no trusted publisher configured, set one up for your CI provider via `npm trust`.
 
 Both steps are skipped when already done. Placeholders are packed from a throwaway temp dir, so your real `package.json` files are never touched.
-
-## Configuration
-
-Set your defaults once instead of passing flags every time. Run:
-
-```sh
-npx fledgling init
-```
-
-…and it writes a `"fledgling"` block to your root `package.json`:
-
-```jsonc
-{
-  "fledgling": {
-    "provider": "github",       // github | gitlab | circleci
-    "workflow": "release.yml",  // the workflow whose job publishes
-    "environment": "publish",   // CI environment for the trusted publisher
-    "permissions": "publish"    // publish | stage | both
-  }
-}
-```
-
-Settings resolve with precedence **CLI flag → `fledgling` config → built-in default** (the repo is auto-detected from your git `origin` unless you pass `--repo`). The `permissions` choice maps to npm trust: `publish` grants `npm publish`, `stage` grants `npm stage` (held for 2FA approval), `both` grants both.
 
 ## Shell completions
 
