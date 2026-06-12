@@ -140,6 +140,11 @@ Supports **npm / yarn / bun** (`workspaces`) and **pnpm** (`pnpm-workspace.yaml`
 ---
 
 <p align="center">
+  <a href="https://varlock.dev" target="_blank" rel="noopener noreferrer">
+    <img src="https://raw.githubusercontent.com/dmno-dev/newdle/main/images/github-readme-footer.png" alt="newdle was created by Varlock">
+  </a>
+</p>
+<p align="center">
   <b>newdle is a creation of the team behind <a href="https://varlock.dev">Varlock</a> 🧙‍♂️</b><br/>
   <a href="https://varlock.dev">Check it out for secure secret sorcery — get your keys out of plaintext!</a>
 </p>
