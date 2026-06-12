@@ -17,7 +17,7 @@ const cancelled = (v: unknown): boolean => p.isCancel(v);
 /** Interactive walkthrough: scan → pick → configure → confirm → apply. */
 export async function runWizard(values: Record<string, any>, selectors: string[]): Promise<number> {
   console.log();
-  p.intro(pc.inverse(pc.cyan(' fledgling ')));
+  p.intro(pc.inverse(pc.cyan(' 🐣 fledgling ')));
 
   const root = findWorkspaceRoot();
   const config = loadConfig(root);
@@ -134,7 +134,7 @@ export async function runWizard(values: Record<string, any>, selectors: string[]
       ? pc.yellow(`Dry run — ${sum.claimed} to claim, ${sum.trusted} to trust. Re-run to apply.`)
       : sum.failed
         ? pc.red(`Done with ${sum.failed} failure(s) — claimed ${sum.claimed}, trusted ${sum.trusted}.`)
-        : pc.green(`Done — claimed ${sum.claimed}, trusted ${sum.trusted}. 🚀`),
+        : pc.green(`Done — claimed ${sum.claimed}, trusted ${sum.trusted}. 🐣`),
   );
   return sum.failed > 0 ? 1 : 0;
 }

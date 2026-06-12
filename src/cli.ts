@@ -106,7 +106,7 @@ await cli(
   argv,
   {
     name: 'fledgling',
-    description: 'Create and set up packages on npm with trusted publishing',
+    description: '🐣 Create and set up packages on npm with trusted publishing',
     args,
     async run(ctx) {
       const selectors = (ctx.positionals ?? []) as string[];
@@ -119,6 +119,6 @@ await cli(
   {
     name: 'fledgling',
     version: VERSION,
-    description: 'Create and set up packages on npm with trusted publishing',
+    description: '🐣 Create and set up packages on npm with trusted publishing',
   },
 );

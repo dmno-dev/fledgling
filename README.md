@@ -1,4 +1,4 @@
-# fledgling
+# fledgling 🐣
 
 [![npm version](https://img.shields.io/npm/v/fledgling?color=cb3837&logo=npm)](https://www.npmjs.com/package/fledgling)
 [![npm downloads](https://img.shields.io/npm/dm/fledgling?color=cb3837&logo=npm)](https://www.npmjs.com/package/fledgling)

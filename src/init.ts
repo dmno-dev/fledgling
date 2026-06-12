@@ -6,7 +6,7 @@ import { loadConfig, writeConfig, type FledglingConfig, type Permission } from '
 /** `fledgling init` — interactively write the `"fledgling"` config into root package.json. */
 export async function runInit(): Promise<number> {
   console.log();
-  p.intro(pc.inverse(pc.cyan(' fledgling init ')));
+  p.intro(pc.inverse(pc.cyan(' 🐣 fledgling init ')));
 
   const root = findWorkspaceRoot();
   const existing = loadConfig(root);
