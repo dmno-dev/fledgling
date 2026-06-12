@@ -1,7 +1,7 @@
 import * as p from '@clack/prompts';
 import pc from 'picocolors';
 import { findWorkspaceRoot, discoverPackages, detectRepo, type Pkg } from './workspace.js';
-import { npmWhoami, publishedNames } from './npm.js';
+import { npmWhoami, publishedNames, trustReadable, npmWebLogin } from './npm.js';
 import {
   resolveTargets,
   processTarget,
@@ -192,6 +192,17 @@ export async function runWizard(values: Record<string, any>, selectors: string[]
     tag: values.tag,
     otp: values.otp,
   };
+
+  // trusted publishing needs a web session — log in if we can't read trust
+  if (apply && !skipTrust && !trustReadable(targets[0].name, registry)) {
+    p.log.warn('npm needs you to log in to manage trusted publishing.');
+    try {
+      npmWebLogin(registry);
+    } catch {
+      p.cancel(pc.red('npm login was cancelled or failed.'));
+      return 1;
+    }
+  }
 
   const reporter: Reporter = {
     step: m => p.log.success(m),

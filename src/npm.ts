@@ -82,17 +82,13 @@ export async function publishedNames(names: string[], registry?: string, concurr
 
 /**
  * Existing trusted-publisher configs (npm allows at most one per package).
- *
- * `npm trust list` hits the registry and may require a one-time password. When
- * `interactive` is true we inherit stdin/stderr so npm can run its OTP/web-auth
- * flow (the first trust op authenticates, later ones reuse it); stdout stays
- * piped so we can still parse the JSON. Quiet mode is best-effort and returns
- * `[]` if it can't authenticate.
+ * Requires an authenticated session — see {@link trustReadable}/{@link npmWebLogin}.
+ * Returns `[]` if it can't read (unauthenticated or no config).
  */
-export function listTrust(name: string, registry?: string, interactive = false): TrustEntry[] {
+export function listTrust(name: string, registry?: string): TrustEntry[] {
   try {
     const out = execFileSync('npm', withRegistry(['trust', 'list', name, '--json'], registry), {
-      stdio: interactive ? ['inherit', 'pipe', 'inherit'] : ['ignore', 'pipe', 'ignore'],
+      stdio: ['ignore', 'pipe', 'ignore'],
       encoding: 'utf8',
     }).trim();
     if (!out) return [];
@@ -103,8 +99,29 @@ export function listTrust(name: string, registry?: string, interactive = false):
   }
 }
 
-export function trustConfigured(name: string, registry?: string, interactive = false): boolean {
-  return listTrust(name, registry, interactive).length > 0;
+export function trustConfigured(name: string, registry?: string): boolean {
+  return listTrust(name, registry).length > 0;
+}
+
+/**
+ * Whether trust configs are readable right now (i.e. we're authenticated).
+ * `npm trust list` requires a logged-in web session — it does NOT prompt for
+ * OTP interactively, it just errors. So we probe with one quiet call.
+ */
+export function trustReadable(name: string, registry?: string): boolean {
+  try {
+    execFileSync('npm', withRegistry(['trust', 'list', name, '--json'], registry), {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Run npm's interactive web login (prints a URL / opens a browser). Throws on failure. */
+export function npmWebLogin(registry?: string): void {
+  execFileSync('npm', withRegistry(['login', '--auth-type=web'], registry), { stdio: 'inherit' });
 }
 
 /** Publish a package.json-only placeholder from a throwaway dir (claims the name). */

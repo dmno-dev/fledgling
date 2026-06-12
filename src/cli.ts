@@ -3,7 +3,7 @@ import { cli } from 'gunshi';
 import pc from 'picocolors';
 import { maybeHandleCompletion } from './completion.js';
 import { findWorkspaceRoot, discoverPackages, detectRepo } from './workspace.js';
-import { npmWhoami } from './npm.js';
+import { npmWhoami, trustReadable, npmWebLogin } from './npm.js';
 import { resolveTargets, processTarget, summarize, validateTrustSettings, buildSettings, type Reporter } from './core.js';
 import { loadConfig } from './config.js';
 import { runWizard } from './interactive.js';
@@ -65,6 +65,16 @@ function runPlain(values: Record<string, any>, selectors: string[]): number {
   if (!dryRun && !npmWhoami()) {
     console.error(pc.red('Not logged in to npm. Run `npm login` (with 2FA) and retry.'));
     return 1;
+  }
+  // managing trusted publishing needs a web session — log in if we can't read trust
+  if (!dryRun && !settings.skipTrust && !trustReadable(resolved.targets[0].name, settings.registry)) {
+    console.log(pc.dim('Logging in to npm to manage trusted publishing…'));
+    try {
+      npmWebLogin(settings.registry);
+    } catch {
+      console.error(pc.red('npm login failed.'));
+      return 1;
+    }
   }
 
   console.log(`${dryRun ? pc.yellow('dry run') : pc.green('apply')} — ${pc.bold('fledgling')} · ${resolved.targets.length} package(s)\n`);

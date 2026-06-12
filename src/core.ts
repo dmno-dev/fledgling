@@ -186,9 +186,8 @@ export function processTarget(t: Pkg, s: Settings, report: Reporter): TargetResu
     if (!exists && !s.dryRun) {
       report.skip(`${t.name} — trust skipped (name not on npm yet)`);
     } else {
-      // Apply mode allows OTP so we can actually see an existing config (npm trust
-      // list needs auth); dry-run stays quiet and is best-effort.
-      const existing = listTrust(t.name, s.registry, !s.dryRun);
+      // Needs an authenticated session (ensured upstream); dry-run is best-effort.
+      const existing = listTrust(t.name, s.registry);
       if (existing.length && !s.force) {
         report.skip(`${t.name} — trust already configured (use --force to replace)`);
         result.trust = 'skip';

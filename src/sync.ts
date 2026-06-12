@@ -1,7 +1,7 @@
 import * as p from '@clack/prompts';
 import pc from 'picocolors';
 import { findWorkspaceRoot, discoverPackages, detectRepo, type Pkg } from './workspace.js';
-import { npmWhoami, listTrust, configureTrust } from './npm.js';
+import { npmWhoami, listTrust, configureTrust, trustReadable, npmWebLogin } from './npm.js';
 import { resolveTargets, validateTrustSettings, buildSettings, toTrustOptions } from './core.js';
 import { loadConfig } from './config.js';
 
@@ -38,20 +38,28 @@ export async function runSync(values: Record<string, any>, selectors: string[]):
     return 1;
   }
 
-  const who = npmWhoami();
-  if (!who) {
-    p.cancel(pc.red('Not logged in to npm. Run `npm login` (with 2FA) and retry.'));
-    return 1;
+  // Managing trusted publishing needs a logged-in web session. `npm trust list`
+  // doesn't prompt for OTP — it just errors — so log in up front if we can't read.
+  if (!trustReadable(targets[0].name, settings.registry)) {
+    p.log.warn('npm needs you to log in to manage trusted publishing.');
+    try {
+      npmWebLogin(settings.registry);
+    } catch {
+      p.cancel(pc.red('npm login was cancelled or failed.'));
+      return 1;
+    }
+    if (!trustReadable(targets[0].name, settings.registry)) {
+      p.cancel(pc.red('Still not authenticated. Try `npm login` manually, then re-run.'));
+      return 1;
+    }
   }
+  const who = npmWhoami() ?? 'npm';
 
-  // Check trust status. The first list call authenticates (npm OTP/web-auth);
-  // later ones reuse it. No spinner here so npm's auth prompt stays readable.
   p.log.step(`Checking trusted publishing for ${pc.bold(String(targets.length))} package(s) as ${pc.green(who)}…`);
-  p.log.message(pc.dim('(you may be asked to authenticate)'));
   const needsSetup: Pkg[] = [];
   let configured = 0;
   for (const t of targets) {
-    if (listTrust(t.name, settings.registry, true).length) configured++;
+    if (listTrust(t.name, settings.registry).length) configured++;
     else needsSetup.push(t);
   }
 
