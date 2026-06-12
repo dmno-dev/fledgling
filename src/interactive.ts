@@ -1,7 +1,7 @@
 import * as p from '@clack/prompts';
 import pc from 'picocolors';
 import { findWorkspaceRoot, discoverPackages, detectRepo, type Pkg } from './workspace.js';
-import { npmWhoami } from './npm.js';
+import { npmWhoami, publishedNames } from './npm.js';
 import {
   resolveTargets,
   processTarget,
@@ -21,6 +21,7 @@ export async function runWizard(values: Record<string, any>, selectors: string[]
 
   const root = findWorkspaceRoot();
   const config = loadConfig(root);
+  const registry: string | undefined = values.registry ?? config.registry;
   const spin = p.spinner();
   spin.start('Scanning workspace');
   const discovered = discoverPackages(root);
@@ -45,10 +46,31 @@ export async function runWizard(values: Record<string, any>, selectors: string[]
     }
     targets = resolved.targets;
     if (selectors.length === 0 && targets.length > 1) {
+      // figure out which are already on npm, so we only pre-select the ones that need claiming
+      const checkSpin = p.spinner();
+      checkSpin.start('Checking which packages are already on npm');
+      const published = await publishedNames(
+        targets.map(t => t.name),
+        registry,
+      );
+      checkSpin.stop(
+        published.size
+          ? `${published.size} of ${targets.length} already on npm`
+          : `none of ${targets.length} on npm yet`,
+      );
+      const fresh = targets.filter(t => !published.has(t.name));
+      const ordered = [...targets].sort((a, b) => Number(published.has(a.name)) - Number(published.has(b.name)));
+      if (fresh.length && published.size) {
+        p.log.info(pc.dim('Already-published packages are unselected — pick any to (re)configure trust.'));
+      }
       const picked = await p.multiselect({
         message: 'Which packages?',
-        options: targets.map(t => ({ value: t.name, label: t.name })),
-        initialValues: targets.map(t => t.name),
+        options: ordered.map(t => ({
+          value: t.name,
+          label: t.name,
+          hint: published.has(t.name) ? 'on npm' : 'new',
+        })),
+        initialValues: (fresh.length ? fresh : targets).map(t => t.name),
         required: true,
       });
       if (cancelled(picked)) return cancel();
@@ -62,7 +84,6 @@ export async function runWizard(values: Record<string, any>, selectors: string[]
   let skipTrust = !!values['skip-trust'];
   const provider = (values.provider ?? config.provider ?? 'github') as Provider;
   const permissions = (values.permissions ?? config.permissions ?? 'publish') as Permission;
-  const registry: string | undefined = values.registry ?? config.registry;
   let repo: string | undefined = values.repo ?? repoInfo?.slug;
   const workflow: string = values.workflow ?? config.workflow ?? 'release.yml';
   const env: string | undefined = values.env ?? config.environment;

@@ -1,8 +1,11 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import type { Permission, Provider } from './config.js';
+
+const execFileP = promisify(execFile);
 
 export interface PublishOptions {
   dryRun: boolean;
@@ -56,6 +59,25 @@ export function packageExists(name: string, registry?: string): boolean {
   } catch {
     return false;
   }
+}
+
+/** Which of `names` already exist on npm — checked in parallel (capped concurrency). */
+export async function publishedNames(names: string[], registry?: string, concurrency = 10): Promise<Set<string>> {
+  const found = new Set<string>();
+  let i = 0;
+  async function worker(): Promise<void> {
+    while (i < names.length) {
+      const name = names[i++];
+      try {
+        await execFileP('npm', withRegistry(['view', name, 'version'], registry));
+        found.add(name);
+      } catch {
+        /* not published */
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, names.length) }, worker));
+  return found;
 }
 
 /**
