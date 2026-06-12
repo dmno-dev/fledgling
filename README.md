@@ -5,6 +5,8 @@
 [![node](https://img.shields.io/node/v/newdle)](https://www.npmjs.com/package/newdle)
 [![license](https://img.shields.io/npm/l/newdle?color=blue)](./LICENSE)
 
+Brought to you by [Varlock](https://varlock.dev) 🧙‍♂️🔐 — [check it out to keep your secrets out of plaintext](https://varlock.dev).
+
 **Create and set up packages on npm with trusted publishing.**
 
 `newdle` claims your package name on npm and sets up token-less ([OIDC trusted](https://docs.npmjs.com/trusted-publishers/)) publishing — no `NPM_TOKEN`, no clicking through the npm website. It works for a single package or a whole monorepo, and it's idempotent, so you can re-run it any time you add a package.
@@ -133,4 +135,11 @@ Supports **npm / yarn / bun** (`workspaces`) and **pnpm** (`pnpm-workspace.yaml`
 
 ## License
 
-[MIT](./LICENSE)
+[MIT](./LICENSE) © DMNO Inc
+
+---
+
+<p align="center">
+  <b>newdle is a creation of the team behind <a href="https://varlock.dev">Varlock</a> 🧙‍♂️</b><br/>
+  <a href="https://varlock.dev">Check it out for secure secret sorcery — get your keys out of plaintext!</a>
+</p>
