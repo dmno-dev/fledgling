@@ -77,7 +77,7 @@ npx newdle @scope/brand-new --new --yes   # claim a name that doesn't exist loca
 | `--placeholder-version <v>` | Placeholder version (default: `0.0.0`) |
 | `--tag <tag>` | dist-tag for placeholders (default: `latest`) |
 | `--otp <code>` | npm one-time password |
-| `--allow-stage-publish` | Also grant staged-publish permission |
+| `--permissions <p>` | Permissions to grant: `publish` (default), `stage`, or `both` |
 
 ## What it does, precisely
 
@@ -87,6 +87,29 @@ For each target package:
 2. **Trust** — if there's no trusted publisher configured, set one up for your CI provider via `npm trust`.
 
 Both steps are skipped when already done. Placeholders are packed from a throwaway temp dir, so your real `package.json` files are never touched.
+
+## Configuration
+
+Set your defaults once instead of passing flags every time. Run:
+
+```sh
+npx newdle init
+```
+
+…and it writes a `"newdle"` block to your root `package.json`:
+
+```jsonc
+{
+  "newdle": {
+    "provider": "github",       // github | gitlab | circleci
+    "workflow": "release.yml",  // the workflow whose job publishes
+    "environment": "publish",   // CI environment for the trusted publisher
+    "permissions": "publish"    // publish | stage | both
+  }
+}
+```
+
+Settings resolve with precedence **CLI flag → `newdle` config → built-in default** (the repo is auto-detected from your git `origin` unless you pass `--repo`). The `permissions` choice maps to npm trust: `publish` grants `npm publish`, `stage` grants `npm stage` (held for 2FA approval), `both` grants both.
 
 ## Shell completions
 

@@ -5,7 +5,9 @@ import { maybeHandleCompletion } from './completion.js';
 import { findWorkspaceRoot, discoverPackages, detectRepo } from './workspace.js';
 import { npmWhoami } from './npm.js';
 import { resolveTargets, processTarget, summarize, type Settings, type Reporter } from './core.js';
+import { loadConfig, type NewdleConfig, type Permission } from './config.js';
 import { runWizard } from './interactive.js';
+import { runInit } from './init.js';
 
 const VERSION = '0.0.0';
 
@@ -15,35 +17,38 @@ const args = {
   new: { type: 'boolean', description: 'Treat unmatched names as brand-new packages to claim' },
   'skip-publish': { type: 'boolean', description: 'Only set up trusted publishing' },
   'skip-trust': { type: 'boolean', description: 'Only claim names' },
-  provider: { type: 'string', default: 'github', description: 'CI provider: github, gitlab, circleci' },
+  // no gunshi defaults on these — so the `newdle` config can fill them in
+  provider: { type: 'string', description: 'CI provider: github (default), gitlab, circleci' },
   repo: { type: 'string', description: 'Trusted-publisher repo (auto-detected from git origin)' },
-  workflow: { type: 'string', default: 'release.yml', description: 'Publishing workflow filename' },
+  workflow: { type: 'string', description: 'Publishing workflow filename (default: release.yml)' },
   env: { type: 'string', description: 'CI environment for the trusted publisher' },
-  'placeholder-version': { type: 'string', default: '0.0.0', description: 'Placeholder version to publish (default 0.0.0)' },
+  permissions: { type: 'string', description: 'Permissions to grant: publish (default), stage, both' },
+  'placeholder-version': { type: 'string', default: '0.0.0', description: 'Placeholder version to publish' },
   tag: { type: 'string', description: 'dist-tag for placeholders' },
   otp: { type: 'string', description: 'npm one-time password' },
-  'allow-stage-publish': { type: 'boolean', description: 'Also grant staged-publish permission' },
 } as const;
 
-function buildSettings(values: Record<string, any>, repo: string | undefined, dryRun: boolean): Settings {
+/** Resolve a setting with precedence: CLI flag → newdle config → built-in default. */
+function buildSettings(values: Record<string, any>, config: NewdleConfig, repo: string | undefined, dryRun: boolean): Settings {
   return {
     dryRun,
     skipPublish: !!values['skip-publish'],
     skipTrust: !!values['skip-trust'],
-    provider: (values.provider ?? 'github') as Settings['provider'],
+    provider: (values.provider ?? config.provider ?? 'github') as Settings['provider'],
     repo,
-    workflow: values.workflow ?? 'release.yml',
-    env: values.env,
+    workflow: values.workflow ?? config.workflow ?? 'release.yml',
+    env: values.env ?? config.environment,
     version: values['placeholder-version'] ?? '0.0.0',
     tag: values.tag,
     otp: values.otp,
-    allowStage: !!values['allow-stage-publish'],
+    permissions: (values.permissions ?? config.permissions ?? 'publish') as Permission,
   };
 }
 
 /** Non-interactive path: a plan by default, applies with --yes. */
 function runPlain(values: Record<string, any>, selectors: string[]): number {
   const root = findWorkspaceRoot();
+  const config = loadConfig(root);
   const discovered = discoverPackages(root);
   const repo = values.repo ?? detectRepo(root)?.slug;
 
@@ -73,7 +78,7 @@ function runPlain(values: Record<string, any>, selectors: string[]): number {
     skip: m => console.log('  ' + pc.dim('· ' + m)),
     fail: m => console.error('  ' + pc.red('✗') + ' ' + m),
   };
-  const settings = buildSettings(values, repo, dryRun);
+  const settings = buildSettings(values, config, repo, dryRun);
   const sum = summarize(resolved.targets.map(t => processTarget(t, settings, reporter)));
 
   console.log(
@@ -86,6 +91,11 @@ function runPlain(values: Record<string, any>, selectors: string[]): number {
 }
 
 const argv = process.argv.slice(2);
+
+// `newdle init` — interactive config setup, written to root package.json
+if (argv[0] === 'init') {
+  process.exit(await runInit());
+}
 
 // shell completion (`newdle complete …`) is handled by @bomb.sh/tab, before gunshi
 if (maybeHandleCompletion(argv)) {

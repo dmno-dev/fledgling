@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import type { Permission } from './config.js';
 
 export interface PublishOptions {
   dryRun: boolean;
@@ -16,7 +17,7 @@ export interface TrustOptions {
   /** publishing workflow / pipeline filename */
   workflow: string;
   env?: string;
-  allowStage?: boolean;
+  permissions: Permission;
   dryRun: boolean;
 }
 
@@ -76,8 +77,8 @@ export function configureTrust(name: string, opts: TrustOptions): void {
   const args = ['trust', opts.provider, name, '--file', opts.workflow];
   args.push(opts.provider === 'gitlab' ? '--project' : '--repo', opts.repo);
   if (opts.env) args.push('--env', opts.env);
-  args.push('--allow-publish');
-  if (opts.allowStage) args.push('--allow-stage-publish');
+  if (opts.permissions === 'publish' || opts.permissions === 'both') args.push('--allow-publish');
+  if (opts.permissions === 'stage' || opts.permissions === 'both') args.push('--allow-stage-publish');
   args.push(opts.dryRun ? '--dry-run' : '-y');
   execFileSync('npm', args, { stdio: 'inherit' });
 }

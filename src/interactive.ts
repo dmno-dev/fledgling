@@ -10,6 +10,7 @@ import {
   type Reporter,
   type TargetResult,
 } from './core.js';
+import { loadConfig, type Permission } from './config.js';
 
 const cancelled = (v: unknown): boolean => p.isCancel(v);
 
@@ -19,6 +20,7 @@ export async function runWizard(values: Record<string, any>, selectors: string[]
   p.intro(pc.inverse(pc.cyan(' newdle ')));
 
   const root = findWorkspaceRoot();
+  const config = loadConfig(root);
   const spin = p.spinner();
   spin.start('Scanning workspace');
   const discovered = discoverPackages(root);
@@ -55,31 +57,28 @@ export async function runWizard(values: Record<string, any>, selectors: string[]
     }
   }
 
-  // --- phases / trust settings ---
+  // --- phases / trust settings (flag → config → default) ---
   const skipPublish = !!values['skip-publish'];
   let skipTrust = !!values['skip-trust'];
   let repo: string | undefined = values.repo ?? repoInfo?.slug;
-  const provider = (values.provider ?? 'github') as Settings['provider'];
-  let workflow: string = values.workflow ?? 'release.yml';
+  const provider = (values.provider ?? config.provider ?? 'github') as Settings['provider'];
+  const workflow: string = values.workflow ?? config.workflow ?? 'release.yml';
+  const env: string | undefined = values.env ?? config.environment;
+  const permissions = (values.permissions ?? config.permissions ?? 'publish') as Permission;
 
   if (!skipTrust) {
     const wantsTrust = await p.confirm({ message: 'Set up trusted publishing (OIDC)?', initialValue: true });
     if (cancelled(wantsTrust)) return cancel();
     skipTrust = !wantsTrust;
   }
-  if (!skipTrust) {
-    if (!repo) {
-      const r = await p.text({
-        message: 'Repo for the trusted publisher (owner/repo):',
-        placeholder: 'me/my-repo',
-        validate: v => (/^[^/]+\/[^/]+$/.test((v ?? '').trim()) ? undefined : 'Use owner/repo'),
-      });
-      if (cancelled(r)) return cancel();
-      repo = String(r).trim();
-    }
-    const wf = await p.text({ message: 'Publishing workflow file:', initialValue: workflow });
-    if (cancelled(wf)) return cancel();
-    workflow = String(wf).trim();
+  if (!skipTrust && !repo) {
+    const r = await p.text({
+      message: 'Repo for the trusted publisher (owner/repo):',
+      placeholder: 'me/my-repo',
+      validate: v => (/^[^/]+\/[^/]+$/.test((v ?? '').trim()) ? undefined : 'Use owner/repo'),
+    });
+    if (cancelled(r)) return cancel();
+    repo = String(r).trim();
   }
 
   // --- plan + confirm ---
@@ -87,7 +86,10 @@ export async function runWizard(values: Record<string, any>, selectors: string[]
     [
       `${pc.bold(String(targets.length))} package(s): ${pc.dim(targets.map(t => t.name).join(', '))}`,
       skipPublish ? '' : pc.green('• claim unpublished names on npm'),
-      skipTrust ? '' : pc.green(`• ${provider} trusted publishing → ${repo}`),
+      skipTrust
+        ? ''
+        : pc.green(`• ${provider} trusted publishing → ${repo} · ${workflow}${env ? ` · env ${env}` : ''} · ${permissions}`),
+      skipTrust ? '' : pc.dim('  (configure these defaults with `newdle init`)'),
     ]
       .filter(Boolean)
       .join('\n'),
@@ -111,11 +113,11 @@ export async function runWizard(values: Record<string, any>, selectors: string[]
     provider,
     repo,
     workflow,
-    env: values.env,
+    env,
     version: values['placeholder-version'] ?? '0.0.0',
     tag: values.tag,
     otp: values.otp,
-    allowStage: !!values['allow-stage-publish'],
+    permissions,
   };
 
   const reporter: Reporter = {

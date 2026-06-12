@@ -13,7 +13,6 @@ const FLAGS: [string, string][] = [
   ['--placeholder-version', 'placeholder version'],
   ['--tag', 'dist-tag for placeholders'],
   ['--otp', 'npm one-time password'],
-  ['--allow-stage-publish', 'also grant staged-publish'],
 ];
 
 function defineCompletions(): void {
@@ -30,6 +29,11 @@ function defineCompletions(): void {
     complete('github', '');
     complete('gitlab', '');
     complete('circleci', '');
+  });
+  t.option('--permissions', 'trust permissions', complete => {
+    complete('publish', '');
+    complete('stage', '');
+    complete('both', '');
   });
   for (const [flag, desc] of FLAGS) t.option(flag, desc);
 }

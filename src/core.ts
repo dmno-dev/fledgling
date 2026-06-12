@@ -1,6 +1,7 @@
 import type { Pkg } from './workspace.js';
 import { discoverPackages, findWorkspaceRoot } from './workspace.js';
 import { packageExists, trustConfigured, publishPlaceholder, configureTrust } from './npm.js';
+import type { Permission } from './config.js';
 
 export interface Settings {
   dryRun: boolean;
@@ -13,7 +14,7 @@ export interface Settings {
   repo?: string;
   workflow: string;
   env?: string;
-  allowStage: boolean;
+  permissions: Permission;
 }
 
 export type StepStatus = 'done' | 'skip' | 'fail' | 'na';
@@ -113,7 +114,7 @@ export function processTarget(t: Pkg, s: Settings, report: Reporter): TargetResu
           repo: s.repo!,
           workflow: s.workflow,
           env: s.env,
-          allowStage: s.allowStage,
+          permissions: s.permissions,
           dryRun: s.dryRun,
         });
         result.trust = 'done';
