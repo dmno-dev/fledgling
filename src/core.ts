@@ -1,14 +1,6 @@
 import type { Pkg } from './workspace.js';
 import { discoverPackages, findWorkspaceRoot } from './workspace.js';
-import {
-  packageExists,
-  trustConfigured,
-  listTrust,
-  revokeTrust,
-  publishPlaceholder,
-  configureTrust,
-  type TrustOptions,
-} from './npm.js';
+import { packageExists, listTrust, revokeTrust, publishPlaceholder, configureTrust, type TrustOptions } from './npm.js';
 import type { Permission, Provider } from './config.js';
 
 export interface Settings {
@@ -164,26 +156,34 @@ export function processTarget(t: Pkg, s: Settings, report: Reporter): TargetResu
   if (!s.skipTrust) {
     if (!exists && !s.dryRun) {
       report.skip(`${t.name} — trust skipped (name not on npm yet)`);
-    } else if (trustConfigured(t.name, s.registry) && !s.force) {
-      report.skip(`${t.name} — trust already configured (use --force to replace)`);
-      result.trust = 'skip';
     } else {
-      try {
-        const replacing = trustConfigured(t.name, s.registry);
-        // Skip the actual npm calls on a dry-run replace (don't revoke; avoid "already exists").
-        if (!(replacing && s.dryRun)) {
-          if (replacing) {
-            // npm allows one config per package — revoke the existing one first
-            for (const e of listTrust(t.name, s.registry)) if (e.id) revokeTrust(t.name, e.id, s.registry);
+      // Apply mode allows OTP so we can actually see an existing config (npm trust
+      // list needs auth); dry-run stays quiet and is best-effort.
+      const existing = listTrust(t.name, s.registry, !s.dryRun);
+      if (existing.length && !s.force) {
+        report.skip(`${t.name} — trust already configured (use --force to replace)`);
+        result.trust = 'skip';
+      } else if (s.dryRun) {
+        // dry-run can't authenticate to check, so it can't see an existing config
+        report.step(
+          s.force
+            ? `${t.name} — would replace trust`
+            : `${t.name} — would set up trust (if not already configured)`,
+        );
+        result.trust = 'done';
+      } else {
+        try {
+          // npm allows one config per package — revoke the existing one before replacing
+          if (s.force && existing.length) {
+            for (const e of existing) if (e.id) revokeTrust(t.name, e.id, s.registry);
           }
           configureTrust(t.name, toTrustOptions(s));
+          result.trust = 'done';
+          report.step(`${t.name} — ${s.force && existing.length ? 'replaced' : 'configured'} trust`);
+        } catch (e) {
+          report.fail(`${t.name} — trust failed: ${(e as Error).message}`);
+          result.trust = 'fail';
         }
-        result.trust = 'done';
-        const verb = replacing ? (s.dryRun ? 'would replace' : 'replaced') : s.dryRun ? 'would configure' : 'configured';
-        report.step(`${t.name} — ${verb} trust`);
-      } catch (e) {
-        report.fail(`${t.name} — trust failed: ${(e as Error).message}`);
-        result.trust = 'fail';
       }
     }
   }

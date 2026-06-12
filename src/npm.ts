@@ -58,11 +58,19 @@ export function packageExists(name: string, registry?: string): boolean {
   }
 }
 
-/** Existing trusted-publisher configs (npm allows at most one per package). */
-export function listTrust(name: string, registry?: string): TrustEntry[] {
+/**
+ * Existing trusted-publisher configs (npm allows at most one per package).
+ *
+ * `npm trust list` hits the registry and may require a one-time password. When
+ * `interactive` is true we inherit stdin/stderr so npm can run its OTP/web-auth
+ * flow (the first trust op authenticates, later ones reuse it); stdout stays
+ * piped so we can still parse the JSON. Quiet mode is best-effort and returns
+ * `[]` if it can't authenticate.
+ */
+export function listTrust(name: string, registry?: string, interactive = false): TrustEntry[] {
   try {
     const out = execFileSync('npm', withRegistry(['trust', 'list', name, '--json'], registry), {
-      stdio: ['ignore', 'pipe', 'ignore'],
+      stdio: interactive ? ['inherit', 'pipe', 'inherit'] : ['ignore', 'pipe', 'ignore'],
       encoding: 'utf8',
     }).trim();
     if (!out) return [];
@@ -73,8 +81,8 @@ export function listTrust(name: string, registry?: string): TrustEntry[] {
   }
 }
 
-export function trustConfigured(name: string, registry?: string): boolean {
-  return listTrust(name, registry).length > 0;
+export function trustConfigured(name: string, registry?: string, interactive = false): boolean {
+  return listTrust(name, registry, interactive).length > 0;
 }
 
 /** Publish a package.json-only placeholder from a throwaway dir (claims the name). */
