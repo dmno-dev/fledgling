@@ -1,0 +1,51 @@
+{
+  "name": "newdle",
+  "version": "0.0.0",
+  "description": "Name your package and launch it — claim the name on npm and set up token-less (OIDC) publishing, for one package or a whole monorepo.",
+  "keywords": [
+    "npm",
+    "publish",
+    "trusted-publishing",
+    "oidc",
+    "provenance",
+    "monorepo",
+    "workspaces",
+    "bootstrap",
+    "cli"
+  ],
+  "license": "MIT",
+  "author": "DMNO",
+  "homepage": "https://github.com/dmno-dev/newdle",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dmno-dev/newdle.git"
+  },
+  "type": "module",
+  "bin": {
+    "newdle": "./dist/cli.mjs"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "typecheck": "tsc --noEmit",
+    "start": "node dist/cli.mjs"
+  },
+  "dependencies": {
+    "@bomb.sh/tab": "^0.0.16",
+    "@clack/prompts": "^1.5.1",
+    "gunshi": "^0.34.0",
+    "picocolors": "^1.1.1",
+    "tinyglobby": "^0.2.10"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.0",
+    "tsdown": "^0.22.2",
+    "typescript": "^6.0.3"
+  }
+}
