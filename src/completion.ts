@@ -40,8 +40,8 @@ function defineCompletions(): void {
 
 /**
  * Handle the hidden `complete` subcommand (shell completion).
- * `newdle complete <shell>` prints an install script; the shell calls
- * `newdle complete -- <words…>` to get dynamic completions.
+ * `fledgling complete <shell>` prints an install script; the shell calls
+ * `fledgling complete -- <words…>` to get dynamic completions.
  * Returns true if it handled the invocation.
  */
 export function maybeHandleCompletion(argv: string[]): boolean {
@@ -51,10 +51,10 @@ export function maybeHandleCompletion(argv: string[]): boolean {
   if (arg === '--') {
     t.parse(argv.slice(2));
   } else if (arg) {
-    t.setup('newdle', 'newdle', arg); // arg = bash | zsh | fish | powershell
+    t.setup('fledgling', 'fledgling', arg); // arg = bash | zsh | fish | powershell
   } else {
-    console.log('Usage: newdle complete <bash|zsh|fish|powershell>');
-    console.log('e.g.  newdle complete zsh >> ~/.zshrc');
+    console.log('Usage: fledgling complete <bash|zsh|fish|powershell>');
+    console.log('e.g.  fledgling complete zsh >> ~/.zshrc');
   }
   return true;
 }

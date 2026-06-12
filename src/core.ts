@@ -59,7 +59,7 @@ export interface ResolveResult {
 /** Turn positional selectors (names/globs) into concrete targets. */
 export function resolveTargets(discovered: Pkg[], selectors: string[], isNew: boolean, root: string): ResolveResult {
   if (selectors.length === 0) {
-    if (isNew) return { targets: [], error: '--new requires a package name, e.g. `newdle @scope/thing --new`' };
+    if (isNew) return { targets: [], error: '--new requires a package name, e.g. `fledgling @scope/thing --new`' };
     return { targets: discovered };
   }
   const seen = new Set<string>();

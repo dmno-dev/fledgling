@@ -1,12 +1,12 @@
 import * as p from '@clack/prompts';
 import pc from 'picocolors';
 import { findWorkspaceRoot, detectRepo } from './workspace.js';
-import { loadConfig, writeConfig, type NewdleConfig, type Permission } from './config.js';
+import { loadConfig, writeConfig, type FledglingConfig, type Permission } from './config.js';
 
-/** `newdle init` — interactively write the `"newdle"` config into root package.json. */
+/** `fledgling init` — interactively write the `"fledgling"` config into root package.json. */
 export async function runInit(): Promise<number> {
   console.log();
-  p.intro(pc.inverse(pc.cyan(' newdle init ')));
+  p.intro(pc.inverse(pc.cyan(' fledgling init ')));
 
   const root = findWorkspaceRoot();
   const existing = loadConfig(root);
@@ -48,16 +48,16 @@ export async function runInit(): Promise<number> {
   });
   if (p.isCancel(permissions)) return cancel();
 
-  const config: NewdleConfig = {
-    provider: provider as NewdleConfig['provider'],
+  const config: FledglingConfig = {
+    provider: provider as FledglingConfig['provider'],
     workflow: String(workflow).trim(),
     ...(String(environment).trim() ? { environment: String(environment).trim() } : {}),
     permissions: permissions as Permission,
   };
 
   const file = writeConfig(root, config);
-  p.note(JSON.stringify({ newdle: config }, null, 2), 'Saved');
-  p.outro(pc.green(`Wrote config to ${pc.dim(file)} — now just run ${pc.bold('npx newdle')}`));
+  p.note(JSON.stringify({ fledgling: config }, null, 2), 'Saved');
+  p.outro(pc.green(`Wrote config to ${pc.dim(file)} — now just run ${pc.bold('npx fledgling')}`));
   return 0;
 }
 

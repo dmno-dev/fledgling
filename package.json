@@ -1,5 +1,5 @@
 {
-  "name": "newdle",
+  "name": "fledgling",
   "version": "0.0.0",
   "description": "Name your package and launch it — claim the name on npm and set up token-less (OIDC) publishing, for one package or a whole monorepo.",
   "keywords": [
@@ -15,14 +15,14 @@
   ],
   "license": "MIT",
   "author": "DMNO Inc",
-  "homepage": "https://github.com/dmno-dev/newdle",
+  "homepage": "https://github.com/dmno-dev/fledgling",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/dmno-dev/newdle.git"
+    "url": "git+https://github.com/dmno-dev/fledgling.git"
   },
   "type": "module",
   "bin": {
-    "newdle": "./dist/cli.mjs"
+    "fledgling": "./dist/cli.mjs"
   },
   "files": [
     "dist"

@@ -5,7 +5,7 @@ import { maybeHandleCompletion } from './completion.js';
 import { findWorkspaceRoot, discoverPackages, detectRepo } from './workspace.js';
 import { npmWhoami } from './npm.js';
 import { resolveTargets, processTarget, summarize, type Settings, type Reporter } from './core.js';
-import { loadConfig, type NewdleConfig, type Permission } from './config.js';
+import { loadConfig, type FledglingConfig, type Permission } from './config.js';
 import { runWizard } from './interactive.js';
 import { runInit } from './init.js';
 
@@ -17,7 +17,7 @@ const args = {
   new: { type: 'boolean', description: 'Treat unmatched names as brand-new packages to claim' },
   'skip-publish': { type: 'boolean', description: 'Only set up trusted publishing' },
   'skip-trust': { type: 'boolean', description: 'Only claim names' },
-  // no gunshi defaults on these — so the `newdle` config can fill them in
+  // no gunshi defaults on these — so the `fledgling` config can fill them in
   provider: { type: 'string', description: 'CI provider: github (default), gitlab, circleci' },
   repo: { type: 'string', description: 'Trusted-publisher repo (auto-detected from git origin)' },
   workflow: { type: 'string', description: 'Publishing workflow filename (default: release.yml)' },
@@ -28,8 +28,8 @@ const args = {
   otp: { type: 'string', description: 'npm one-time password' },
 } as const;
 
-/** Resolve a setting with precedence: CLI flag → newdle config → built-in default. */
-function buildSettings(values: Record<string, any>, config: NewdleConfig, repo: string | undefined, dryRun: boolean): Settings {
+/** Resolve a setting with precedence: CLI flag → fledgling config → built-in default. */
+function buildSettings(values: Record<string, any>, config: FledglingConfig, repo: string | undefined, dryRun: boolean): Settings {
   return {
     dryRun,
     skipPublish: !!values['skip-publish'],
@@ -72,7 +72,7 @@ function runPlain(values: Record<string, any>, selectors: string[]): number {
     return 1;
   }
 
-  console.log(`${dryRun ? pc.yellow('dry run') : pc.green('apply')} — ${pc.bold('newdle')} · ${resolved.targets.length} package(s)\n`);
+  console.log(`${dryRun ? pc.yellow('dry run') : pc.green('apply')} — ${pc.bold('fledgling')} · ${resolved.targets.length} package(s)\n`);
   const reporter: Reporter = {
     step: m => console.log('  ' + pc.green('✓') + ' ' + m),
     skip: m => console.log('  ' + pc.dim('· ' + m)),
@@ -92,12 +92,12 @@ function runPlain(values: Record<string, any>, selectors: string[]): number {
 
 const argv = process.argv.slice(2);
 
-// `newdle init` — interactive config setup, written to root package.json
+// `fledgling init` — interactive config setup, written to root package.json
 if (argv[0] === 'init') {
   process.exit(await runInit());
 }
 
-// shell completion (`newdle complete …`) is handled by @bomb.sh/tab, before gunshi
+// shell completion (`fledgling complete …`) is handled by @bomb.sh/tab, before gunshi
 if (maybeHandleCompletion(argv)) {
   process.exit(0);
 }
@@ -105,7 +105,7 @@ if (maybeHandleCompletion(argv)) {
 await cli(
   argv,
   {
-    name: 'newdle',
+    name: 'fledgling',
     description: 'Create and set up packages on npm with trusted publishing',
     args,
     async run(ctx) {
@@ -117,7 +117,7 @@ await cli(
     },
   },
   {
-    name: 'newdle',
+    name: 'fledgling',
     version: VERSION,
     description: 'Create and set up packages on npm with trusted publishing',
   },

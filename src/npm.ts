@@ -56,7 +56,7 @@ export function trustConfigured(name: string): boolean {
 
 /** Publish a package.json-only placeholder from a throwaway dir (claims the name). */
 export function publishPlaceholder(manifest: Record<string, any>, opts: PublishOptions): void {
-  const dir = mkdtempSync(join(tmpdir(), 'newdle-'));
+  const dir = mkdtempSync(join(tmpdir(), 'fledgling-'));
   try {
     writeFileSync(join(dir, 'package.json'), JSON.stringify(manifest, null, 2) + '\n');
     const args = ['publish', '--access', 'public'];

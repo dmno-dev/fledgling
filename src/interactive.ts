@@ -17,7 +17,7 @@ const cancelled = (v: unknown): boolean => p.isCancel(v);
 /** Interactive walkthrough: scan → pick → configure → confirm → apply. */
 export async function runWizard(values: Record<string, any>, selectors: string[]): Promise<number> {
   console.log();
-  p.intro(pc.inverse(pc.cyan(' newdle ')));
+  p.intro(pc.inverse(pc.cyan(' fledgling ')));
 
   const root = findWorkspaceRoot();
   const config = loadConfig(root);
@@ -89,7 +89,7 @@ export async function runWizard(values: Record<string, any>, selectors: string[]
       skipTrust
         ? ''
         : pc.green(`• ${provider} trusted publishing → ${repo} · ${workflow}${env ? ` · env ${env}` : ''} · ${permissions}`),
-      skipTrust ? '' : pc.dim('  (configure these defaults with `newdle init`)'),
+      skipTrust ? '' : pc.dim('  (configure these defaults with `fledgling init`)'),
     ]
       .filter(Boolean)
       .join('\n'),
