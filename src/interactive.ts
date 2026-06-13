@@ -161,7 +161,10 @@ export async function runWizard(values: Record<string, any>, selectors: string[]
   );
   if (!skipTrust) {
     const view: TrustView = { provider, permissions, registry, repo, workflow, env, orgId, projectId, pipelineDefinitionId, vcsOrigin, contextIds };
-    p.note(`${describeConfig(view)}\n${pc.dim('change with `fledgling init`')}`, 'Trusted publishing');
+    p.note(
+      `${describeConfig(view)}\n\n${pc.italic(pc.dim('Change these with `fledgling init`'))}`,
+      'Trusted publishing settings',
+    );
   }
 
   const who = npmWhoami();

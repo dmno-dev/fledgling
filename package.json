@@ -49,6 +49,9 @@
     "typescript": "^6.0.3"
   },
   "fledgling": {
-    "environment": "publish"
+    "provider": "github",
+    "workflow": "release.yml",
+    "environment": "publish",
+    "permissions": "publish"
   }
 }
