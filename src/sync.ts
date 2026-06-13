@@ -38,13 +38,20 @@ export async function runSync(values: Record<string, any>, selectors: string[]):
     return 1;
   }
 
+  const who = npmWhoami();
+  if (!who) {
+    p.cancel(pc.red('Not logged in to npm. Run `npm login` and retry.'));
+    return 1;
+  }
+  p.log.info(`Logged in to npm as ${pc.green(who)}`);
+
   // `npm trust` needs an OTP on 2FA accounts (and it doesn't prompt — it errors).
   // Ask for one if reads aren't working without it.
   let otp = settings.otp;
   if (!trustReadable(targets[0].name, settings.registry, otp)) {
     for (let tries = 0; tries < 3; tries++) {
       const code = await p.password({
-        message: 'npm one-time password (2FA code):',
+        message: `npm one-time password (2FA code) for ${who}:`,
         validate: x => (/^\d{6,}$/.test((x ?? '').trim()) ? undefined : 'Enter your 6-digit code'),
       });
       if (p.isCancel(code)) {
@@ -61,9 +68,8 @@ export async function runSync(values: Record<string, any>, selectors: string[]):
     }
   }
   settings.otp = otp;
-  const who = npmWhoami() ?? 'npm';
 
-  p.log.step(`Checking trusted publishing for ${pc.bold(String(targets.length))} package(s) as ${pc.green(who)}…`);
+  p.log.step(`Checking trusted publishing for ${pc.bold(String(targets.length))} package(s)…`);
   const needsSetup: Pkg[] = [];
   let configured = 0;
   for (const t of targets) {

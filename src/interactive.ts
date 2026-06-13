@@ -197,7 +197,7 @@ export async function runWizard(values: Record<string, any>, selectors: string[]
   if (apply && !skipTrust && !trustReadable(targets[0].name, registry, settings.otp)) {
     for (let tries = 0; tries < 3; tries++) {
       const code = await p.password({
-        message: 'npm one-time password (2FA code):',
+        message: `npm one-time password (2FA code) for ${who}:`,
         validate: x => (/^\d{6,}$/.test((x ?? '').trim()) ? undefined : 'Enter your 6-digit code'),
       });
       if (cancelled(code)) return cancel();
