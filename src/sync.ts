@@ -49,6 +49,7 @@ export async function runSync(values: Record<string, any>, selectors: string[]):
   // Ask for one if reads aren't working without it.
   let otp = settings.otp;
   if (!trustReadable(targets[0].name, settings.registry, otp)) {
+    p.log.warn('npm requires a 2FA one-time password to read and manage trusted publishing.');
     for (let tries = 0; tries < 3; tries++) {
       const code = await p.password({
         message: `npm one-time password (2FA code) for ${who}:`,

@@ -195,6 +195,7 @@ export async function runWizard(values: Record<string, any>, selectors: string[]
 
   // trusted publishing needs an OTP on 2FA accounts — ask if reads aren't working
   if (apply && !skipTrust && !trustReadable(targets[0].name, registry, settings.otp)) {
+    p.log.warn('npm requires a 2FA one-time password to set up trusted publishing.');
     for (let tries = 0; tries < 3; tries++) {
       const code = await p.password({
         message: `npm one-time password (2FA code) for ${who}:`,
