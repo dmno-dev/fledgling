@@ -2,6 +2,7 @@ import * as p from '@clack/prompts';
 import pc from 'picocolors';
 import { findWorkspaceRoot, detectRepo } from './workspace.js';
 import { loadConfig, writeConfig, type FledglingConfig, type Permission, type Provider } from './config.js';
+import { hatchIntro } from './ui.js';
 
 const CANCEL = Symbol('cancel');
 /** Prompt for required text; returns the trimmed value or CANCEL. */
@@ -18,7 +19,7 @@ async function ask(message: string, initialValue?: string, required = true): Pro
 /** `fledgling init` — interactively write the `"fledgling"` config into root package.json. */
 export async function runInit(): Promise<number> {
   console.log();
-  p.intro(pc.inverse(pc.cyan(' 🐣 fledgling init ')));
+  await hatchIntro('fledgling init');
 
   const root = findWorkspaceRoot();
   const existing = loadConfig(root);

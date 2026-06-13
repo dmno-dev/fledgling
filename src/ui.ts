@@ -1,18 +1,33 @@
 import * as p from '@clack/prompts';
+import pc from 'picocolors';
 import { setTimeout as sleep } from 'node:timers/promises';
 
-const CLEAR_LINE = '\r\x1b[2K';
+const BAR_START = '┌'; // ┌  (matches clack's intro)
 
 /** A spinner that hatches: 🥚 → 🐣 → 🐥. */
 export const hatchSpinner = () => p.spinner({ frames: ['🥚', '🥚', '🐣', '🐣', '🐥'], delay: 180 });
 
-/** A short one-shot hatch animation shown at startup (TTY only). */
-export async function hatch(): Promise<void> {
-  if (!process.stdout.isTTY) return;
-  const frames = ['🥚', '🥚', '🥚', '🐣', '🐣', '🐥'];
-  for (const f of frames) {
-    process.stdout.write(`${CLEAR_LINE}  ${f} `);
-    await sleep(170);
+/** clack's intro line, drawn ourselves so we can animate the title into it. */
+const introLine = (content: string) => `${pc.gray(BAR_START)}  ${content}`;
+
+/**
+ * Animated clack-style intro: an egg hatches (🥚→🐣→🐥), then the title types
+ * out letter by letter — ending as the box-opening `┌` line so the rest of the
+ * clack flow lines up underneath. Falls back to a static line off-TTY.
+ */
+export async function hatchIntro(title: string): Promise<void> {
+  const out = process.stdout;
+  if (!out.isTTY) {
+    out.write(`${introLine(`🐥 ${pc.cyan(title)}`)}\n`);
+    return;
   }
-  process.stdout.write(CLEAR_LINE);
+  for (const egg of ['🥚', '🥚', '🥚', '🐣', '🐣', '🐥']) {
+    out.write(`\r${introLine(egg)}`);
+    await sleep(150);
+  }
+  for (let i = 0; i <= title.length; i++) {
+    out.write(`\r${introLine(`🐥 ${pc.cyan(title.slice(0, i))}`)}`);
+    await sleep(55);
+  }
+  out.write('\n');
 }
