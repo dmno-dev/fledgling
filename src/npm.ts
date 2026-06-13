@@ -99,6 +99,34 @@ function withOtp(args: string[], otp?: string): string[] {
 }
 
 /**
+ * Does this error look like npm rejecting/expiring the 2FA one-time password?
+ * (TOTP codes are short-lived, so a long run can outlive the one you started with.)
+ */
+export function isOtpError(e: unknown): boolean {
+  const msg = (e as { message?: string })?.message ?? String(e);
+  return /\bEOTP\b|one[-\s]?time pass|\botp\b|invalid.*2fa|2fa.*invalid/i.test(msg);
+}
+
+/**
+ * Run an `npm trust …` mutation, surfacing npm's output to the user but also
+ * capturing stderr so the thrown error carries npm's message (so callers can
+ * detect an expired OTP and re-prompt). Throws on non-zero exit.
+ */
+function runTrust(args: string[]): void {
+  try {
+    execFileSync('npm', args, { stdio: ['ignore', 'inherit', 'pipe'], encoding: 'utf8' });
+  } catch (e) {
+    const err = e as { stderr?: string; message?: string };
+    const stderr = (err.stderr ?? '').toString();
+    if (stderr) {
+      process.stderr.write(stderr);
+      err.message = `${err.message ?? ''}\n${stderr}`.trim();
+    }
+    throw e;
+  }
+}
+
+/**
  * Existing trusted-publisher configs (npm allows at most one per package).
  * `npm trust list` needs auth + (on 2FA accounts) an OTP — it does NOT prompt,
  * it just errors. Pass `otp`. Returns `[]` if it can't read (or no config).
@@ -168,10 +196,10 @@ export function configureTrust(name: string, opts: TrustOptions): void {
   withRegistry(args, opts.registry);
   withOtp(args, opts.otp);
   args.push(opts.dryRun ? '--dry-run' : '-y');
-  execFileSync('npm', args, { stdio: 'inherit' });
+  runTrust(args);
 }
 
 /** Revoke a trusted-publisher config by id (used by --force to replace one). */
 export function revokeTrust(name: string, id: string, registry?: string, otp?: string): void {
-  execFileSync('npm', withOtp(withRegistry(['trust', 'revoke', name, `--id=${id}`], registry), otp), { stdio: 'inherit' });
+  runTrust(withOtp(withRegistry(['trust', 'revoke', name, `--id=${id}`], registry), otp));
 }
