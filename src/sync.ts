@@ -12,6 +12,7 @@ import {
   describeConfig,
 } from './core.js';
 import { loadConfig } from './config.js';
+import { hatchSpinner } from './ui.js';
 
 /**
  * `fledgling sync` — reconcile trusted publishing across the workspace.
@@ -49,7 +50,7 @@ export async function runSync(values: Record<string, any>, selectors: string[]):
   p.note(describeConfig(settings), 'Syncing trust settings');
 
   // trusted publishing can only be configured for packages that exist on npm
-  const checkSpin = p.spinner();
+  const checkSpin = hatchSpinner();
   checkSpin.start('Checking packages exist on npm…');
   const published = await publishedNames(
     targets.map(t => t.name),

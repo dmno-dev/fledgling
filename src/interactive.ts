@@ -13,6 +13,7 @@ import {
   type TrustView,
 } from './core.js';
 import { loadConfig, type Permission, type Provider } from './config.js';
+import { hatchSpinner } from './ui.js';
 
 const cancelled = (v: unknown): boolean => p.isCancel(v);
 
@@ -24,7 +25,7 @@ export async function runWizard(values: Record<string, any>, selectors: string[]
   const root = findWorkspaceRoot();
   const config = loadConfig(root);
   const registry: string | undefined = values.registry ?? config.registry;
-  const spin = p.spinner();
+  const spin = hatchSpinner();
   spin.start('Scanning workspace');
   const discovered = discoverPackages(root);
   const repoInfo = detectRepo(root);
@@ -49,7 +50,7 @@ export async function runWizard(values: Record<string, any>, selectors: string[]
     targets = resolved.targets;
     if (selectors.length === 0 && targets.length > 1) {
       const onlyTrust = !!values['skip-publish'];
-      const checkSpin = p.spinner();
+      const checkSpin = hatchSpinner();
       checkSpin.start('Checking which packages are already on npm');
       const published = await publishedNames(
         targets.map(t => t.name),
