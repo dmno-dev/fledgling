@@ -1,7 +1,8 @@
 import * as p from '@clack/prompts';
 import pc from 'picocolors';
 import { findWorkspaceRoot, discoverPackages, detectRepo, type Pkg } from './workspace.js';
-import { npmWhoami, listTrust, configureTrust, revokeTrust, trustReadable } from './npm.js';
+import { npmWhoami, listTrust, configureTrust, revokeTrust, trustReadable, publishedNames } from './npm.js';
+import type { Settings } from './core.js';
 import {
   resolveTargets,
   validateTrustSettings,
@@ -35,7 +36,7 @@ export async function runSync(values: Record<string, any>, selectors: string[]):
     p.cancel(pc.red('No public packages found in this workspace.'));
     return 1;
   }
-  const targets = resolved.targets;
+  let targets = resolved.targets;
 
   const settings = buildSettings(values, config, repo, false); // apply mode
   settings.skipPublish = true;
@@ -43,6 +44,29 @@ export async function runSync(values: Record<string, any>, selectors: string[]):
   if (err) {
     p.cancel(pc.red(err));
     return 1;
+  }
+
+  p.note(describeConfig(settings), 'Syncing to');
+
+  // trusted publishing can only be configured for packages that exist on npm
+  const checkSpin = p.spinner();
+  checkSpin.start('Checking which packages are on npm');
+  const published = await publishedNames(
+    targets.map(t => t.name),
+    settings.registry,
+  );
+  checkSpin.stop(`${published.size} of ${targets.length} on npm`);
+  const unpublished = targets.filter(t => !published.has(t.name));
+  if (unpublished.length) {
+    p.log.warn(
+      `${unpublished.length} package(s) aren't on npm yet — run ${pc.bold('fledgling')} to claim them first:\n` +
+        unpublished.map(t => `  ${pc.dim('·')} ${t.name}`).join('\n'),
+    );
+  }
+  targets = targets.filter(t => published.has(t.name));
+  if (!targets.length) {
+    p.outro(pc.yellow('Nothing to sync yet — claim these packages with `fledgling` first.'));
+    return 0;
   }
 
   const who = npmWhoami();
@@ -142,4 +166,18 @@ export async function runSync(values: Record<string, any>, selectors: string[]):
   }
   p.outro(failed ? pc.red(`Done with ${failed} failure(s).`) : pc.green(`Synced ${fixed} package(s) 🐣`));
   return failed > 0 ? 1 : 0;
+}
+
+/** The desired config sync reconciles toward (shown to the user). */
+function describeConfig(s: Settings): string {
+  const f = (v: string | undefined) => v ?? pc.dim('(none)');
+  const lines = [`provider:    ${s.provider}`, `permissions: ${s.permissions}`];
+  if (s.provider === 'circleci') {
+    lines.push(`org-id:      ${f(s.orgId)}`, `project-id:  ${f(s.projectId)}`, `pipeline-id: ${f(s.pipelineDefinitionId)}`, `vcs-origin:  ${f(s.vcsOrigin)}`);
+    if (s.contextIds?.length) lines.push(`context-ids: ${s.contextIds.join(', ')}`);
+  } else {
+    lines.push(`repo:        ${f(s.repo)}`, `workflow:    ${s.workflow}`, `environment: ${f(s.env)}`);
+  }
+  if (s.registry) lines.push(`registry:    ${s.registry}`);
+  return lines.join('\n');
 }
