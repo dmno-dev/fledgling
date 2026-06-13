@@ -46,7 +46,7 @@ export async function runSync(values: Record<string, any>, selectors: string[]):
     return 1;
   }
 
-  p.note(describeConfig(settings), 'Syncing to');
+  p.note(describeConfig(settings), 'Syncing trust settings');
 
   // trusted publishing can only be configured for packages that exist on npm
   const checkSpin = p.spinner();
