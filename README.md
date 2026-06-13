@@ -100,6 +100,13 @@ Add `"registry"` to either block to target a non-default npm registry.
 
 Precedence is **CLI flag → `fledgling` config → built-in default**.
 
+### Just want to claim names?
+
+To skip trusted publishing entirely and only reserve package names, you can:
+- pass **`--skip-trust`** for a single run,
+- decline the wizard's "Set up trusted publishing?" prompt, or
+- set **`"trust": false`** in your `fledgling` config to make it the default.
+
 ## Usage
 
 ```sh

@@ -2,7 +2,6 @@ import * as p from '@clack/prompts';
 import pc from 'picocolors';
 import { findWorkspaceRoot, discoverPackages, detectRepo, type Pkg } from './workspace.js';
 import { npmWhoami, listTrust, configureTrust, revokeTrust, trustReadable, publishedNames } from './npm.js';
-import type { Settings } from './core.js';
 import {
   resolveTargets,
   validateTrustSettings,
@@ -10,6 +9,7 @@ import {
   toTrustOptions,
   trustMatches,
   describeTrustDiff,
+  describeConfig,
 } from './core.js';
 import { loadConfig } from './config.js';
 
@@ -166,18 +166,4 @@ export async function runSync(values: Record<string, any>, selectors: string[]):
   }
   p.outro(failed ? pc.red(`Done with ${failed} failure(s).`) : pc.green(`Synced ${fixed} package(s) 🐣`));
   return failed > 0 ? 1 : 0;
-}
-
-/** The desired config sync reconciles toward (shown to the user). */
-function describeConfig(s: Settings): string {
-  const f = (v: string | undefined) => v ?? pc.dim('(none)');
-  const lines = [`provider:    ${s.provider}`, `permissions: ${s.permissions}`];
-  if (s.provider === 'circleci') {
-    lines.push(`org-id:      ${f(s.orgId)}`, `project-id:  ${f(s.projectId)}`, `pipeline-id: ${f(s.pipelineDefinitionId)}`, `vcs-origin:  ${f(s.vcsOrigin)}`);
-    if (s.contextIds?.length) lines.push(`context-ids: ${s.contextIds.join(', ')}`);
-  } else {
-    lines.push(`repo:        ${f(s.repo)}`, `workflow:    ${s.workflow}`, `environment: ${f(s.env)}`);
-  }
-  if (s.registry) lines.push(`registry:    ${s.registry}`);
-  return lines.join('\n');
 }

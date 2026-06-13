@@ -6,9 +6,11 @@ import {
   resolveTargets,
   processTarget,
   summarize,
+  describeConfig,
   type Settings,
   type Reporter,
   type TargetResult,
+  type TrustView,
 } from './core.js';
 import { loadConfig, type Permission, type Provider } from './config.js';
 
@@ -103,7 +105,7 @@ export async function runWizard(values: Record<string, any>, selectors: string[]
 
   // --- phases / trust settings (flag → config → default) ---
   const skipPublish = !!values['skip-publish'];
-  let skipTrust = !!values['skip-trust'];
+  let skipTrust = !!values['skip-trust'] || config.trust === false;
   const provider = (values.provider ?? config.provider ?? 'github') as Provider;
   const permissions = (values.permissions ?? config.permissions ?? 'publish') as Permission;
   let repo: string | undefined = values.repo ?? repoInfo?.slug;
@@ -146,21 +148,20 @@ export async function runWizard(values: Record<string, any>, selectors: string[]
   }
 
   // --- plan + confirm ---
-  const trustLine =
-    provider === 'circleci'
-      ? `• circleci trusted publishing → ${vcsOrigin} · ${permissions}`
-      : `• ${provider} trusted publishing → ${repo} · ${workflow}${env ? ` · env ${env}` : ''} · ${permissions}`;
   p.note(
     [
       `${pc.bold(String(targets.length))} package(s): ${pc.dim(targets.map(t => t.name).join(', '))}`,
       skipPublish ? '' : pc.green('• claim unpublished names on npm'),
-      skipTrust ? '' : pc.green(trustLine),
-      skipTrust ? '' : pc.dim('  (configure these defaults with `fledgling init`)'),
+      skipTrust ? '' : pc.green('• set up trusted publishing'),
     ]
       .filter(Boolean)
       .join('\n'),
     'Plan',
   );
+  if (!skipTrust) {
+    const view: TrustView = { provider, permissions, registry, repo, workflow, env, orgId, projectId, pipelineDefinitionId, vcsOrigin, contextIds };
+    p.note(`${describeConfig(view)}\n${pc.dim('change with `fledgling init`')}`, 'Trusted publishing');
+  }
 
   const who = npmWhoami();
   let apply = false;

@@ -65,7 +65,7 @@ export function buildSettings(
   return {
     dryRun,
     skipPublish: !!values['skip-publish'],
-    skipTrust: !!values['skip-trust'],
+    skipTrust: !!values['skip-trust'] || config.trust === false,
     force: !!values.force,
     provider: (values.provider ?? config.provider ?? 'github') as Provider,
     permissions: (values.permissions ?? config.permissions ?? 'publish') as Permission,
@@ -151,6 +151,30 @@ export function describeTrustDiff(e: TrustEntry, s: Settings): string[] {
     if (!eq(e.environment, s.env)) d.push(`environment ${f(e.environment)} → ${f(s.env)}`);
   }
   return d;
+}
+
+export type TrustView = Pick<
+  Settings,
+  'provider' | 'permissions' | 'registry' | 'repo' | 'workflow' | 'env' | 'orgId' | 'projectId' | 'pipelineDefinitionId' | 'vcsOrigin' | 'contextIds'
+>;
+
+/** The desired trusted-publishing config, formatted for display. */
+export function describeConfig(c: TrustView): string {
+  const f = (v?: string) => v ?? '(none)';
+  const lines = [`provider:    ${c.provider}`, `permissions: ${c.permissions}`];
+  if (c.provider === 'circleci') {
+    lines.push(
+      `org-id:      ${f(c.orgId)}`,
+      `project-id:  ${f(c.projectId)}`,
+      `pipeline-id: ${f(c.pipelineDefinitionId)}`,
+      `vcs-origin:  ${f(c.vcsOrigin)}`,
+    );
+    if (c.contextIds?.length) lines.push(`context-ids: ${c.contextIds.join(', ')}`);
+  } else {
+    lines.push(`repo:        ${f(c.repo)}`, `workflow:    ${c.workflow}`, `environment: ${f(c.env)}`);
+  }
+  if (c.registry) lines.push(`registry:    ${c.registry}`);
+  return lines.join('\n');
 }
 
 export type StepStatus = 'done' | 'skip' | 'fail' | 'na';
