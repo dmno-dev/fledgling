@@ -1,0 +1,89 @@
+# .github/workflows/release.yml
+name: Bumpy Release
+on:
+  push:
+    # Add any prerelease channel branches here too, e.g. [main, next, beta].
+    # See the prerelease channels docs: https://github.com/dmno-dev/bumpy/blob/main/docs/prereleases.md
+    branches: [main]
+
+concurrency:
+  # Per-ref: serialize a branch's releases, let different branches run in parallel
+  group: bumpy-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # Detect what `ci release` would do — no write permissions, no publish credentials.
+  # Also resolves bumpy's version once and exposes it as an output for downstream jobs.
+  plan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      mode: ${{ steps.plan.outputs.mode }}
+      packages: ${{ steps.plan.outputs.packages }}
+      bumpy_version: ${{ steps.bumpy-version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+      # No `bun install` — bumpy reads files (package.jsons, bump files) and doesn't need your workspace deps resolved
+      # We just pin its version from package.json and let bunx fetch it
+      - id: bumpy-version
+        name: Resolve bumpy version
+        run: |
+          VERSION=$(jq -r '.devDependencies["@varlock/bumpy"] // .dependencies["@varlock/bumpy"]' package.json | sed 's/[\^~]//')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "BUMPY_VERSION=$VERSION" >> "$GITHUB_ENV"
+      - id: plan
+        run: bunx "@varlock/bumpy@$BUMPY_VERSION" ci plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  # Creates/updates the Version Packages PR. No publish credentials.
+  version-pr:
+    needs: plan
+    if: needs.plan.outputs.mode == 'version-pr'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      BUMPY_VERSION: ${{ needs.plan.outputs.bumpy_version }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+      - run: bunx "@varlock/bumpy@$BUMPY_VERSION" ci release --expect-mode version-pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUMPY_GH_TOKEN: ${{ secrets.BUMPY_GH_TOKEN }} # so the version PR triggers CI
+
+  # Publishes packages. Scoped to the `publish` environment.
+  publish:
+    needs: plan
+    if: needs.plan.outputs.mode == 'publish'
+    runs-on: ubuntu-latest
+    environment: publish
+    permissions:
+      contents: write
+      id-token: write # required for npm trusted publishing (OIDC) and provenance
+    env:
+      BUMPY_VERSION: ${{ needs.plan.outputs.bumpy_version }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v6
+        with:
+          node-version: latest
+      - run: npm install -g npm@latest # ensure npm >= 11.15.0 for OIDC/staged publishing
+      # fledgling ships its compiled `dist/`, so build before publishing.
+      - run: bun install
+      - run: bun run build
+      - run: bunx "@varlock/bumpy@$BUMPY_VERSION" ci release --expect-mode publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUMPY_GH_TOKEN: ${{ secrets.BUMPY_GH_TOKEN }} # so `release: published` workflows trigger

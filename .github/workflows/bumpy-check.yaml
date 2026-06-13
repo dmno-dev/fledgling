@@ -1,0 +1,40 @@
+# .github/workflows/bumpy-check.yaml
+name: Bumpy Check
+
+on: pull_request_target # so it can post comments on fork PRs
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      # Check out the PR head so bumpy can read the PR's bump files, config,
+      # and package.json. We never execute this code.
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: oven-sh/setup-bun@v2
+
+      # ⚠️ DO NOT INSTALL DEPS OR EXECUTE CODE ⚠️
+
+      # Resolve bumpy's version from the BASE branch's package.json (trusted).
+      # Reading it from the PR's package.json would let a fork PR swap in a
+      # malicious version of bumpy.
+      - name: Resolve bumpy version from base
+        run: |
+          # Hardcoded to "main" rather than ${{ github.event.pull_request.base.ref }}
+          # because the PR controls its base — pointing at any other branch you have
+          # would read that branch's package.json. Change "main" to your base branch.
+          git fetch origin main --depth=1
+          VERSION=$(git show "origin/main:package.json" \
+            | jq -r '.devDependencies["@varlock/bumpy"] // .dependencies["@varlock/bumpy"]' \
+            | sed 's/[\^~]//')
+          echo "BUMPY_VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      # Quote the version arg so a malformed value can't shell-inject.
+      - run: bunx "@varlock/bumpy@$BUMPY_VERSION" ci check
+        env:
+          GH_TOKEN: ${{ github.token }}

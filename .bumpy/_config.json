@@ -1,0 +1,12 @@
+{
+  "$schema": "../node_modules/@varlock/bumpy/config-schema.json",
+  "baseBranch": "main",
+  "publish": {
+    "provenance": true
+  },
+  "changelog": [
+    "github", {
+      "internalAuthors": ["theoephraim"]
+    }
+  ],
+}
