@@ -22,27 +22,41 @@ const FLAGS: [string, string][] = [
   ['--context-id', 'CircleCI context UUID (repeatable)'],
 ];
 
-function defineCompletions(): void {
-  // positional package selectors → complete with workspace package names
-  t.argument(
+type Cmd = {
+  argument(name: string, handler: (complete: (v: string, d?: string) => void) => void, variadic?: boolean): Cmd;
+  option(flag: string, desc: string, handler?: (complete: (v: string, d?: string) => void) => void): Cmd;
+};
+
+/** Wire the package-name positional + every flag onto a command. */
+function withPackageArgsAndFlags(cmd: Cmd): void {
+  cmd.argument(
     'packages',
     complete => {
       for (const p of workspacePackages()) complete(p.name, 'package');
     },
     true,
   );
-
-  t.option('--provider', 'CI provider', complete => {
+  cmd.option('--provider', 'CI provider', complete => {
     complete('github', '');
     complete('gitlab', '');
     complete('circleci', '');
   });
-  t.option('--permissions', 'trust permissions', complete => {
+  cmd.option('--permissions', 'trust permissions', complete => {
     complete('publish', '');
     complete('stage', '');
     complete('both', '');
   });
-  for (const [flag, desc] of FLAGS) t.option(flag, desc);
+  for (const [flag, desc] of FLAGS) cmd.option(flag, desc);
+}
+
+function defineCompletions(): void {
+  // subcommands: `add` / `sync` take package selectors + flags, `init` takes nothing
+  withPackageArgsAndFlags(t.command('add', 'claim names + set up trusted publishing') as unknown as Cmd);
+  withPackageArgsAndFlags(t.command('sync', 'reconcile trusted publishing with your config') as unknown as Cmd);
+  t.command('init', 'write trusted-publishing config to package.json');
+
+  // bare `fledgling …` (default command) also accepts selectors + flags
+  withPackageArgsAndFlags(t as unknown as Cmd);
 }
 
 /**

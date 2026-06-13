@@ -91,45 +91,80 @@ function runPlain(values: Record<string, any>, selectors: string[]): number {
   return sum.failed > 0 ? 1 : 0;
 }
 
-const rawArgv = process.argv.slice(2);
+/**
+ * gunshi keeps the matched subcommand name in `positionals` (e.g. `add foo` →
+ * `['add','foo']` with `commandPath: ['add']`), so drop the command path to get
+ * the real package selectors. The default command has an empty path, so this is a
+ * no-op there.
+ */
+type Ctx = { values: Record<string, any>; positionals?: string[]; commandPath?: string[] };
+const selectorsOf = (ctx: Ctx): string[] => (ctx.positionals ?? []).slice(ctx.commandPath?.length ?? 0);
 
-// `fledgling init` — interactive config setup, written to root package.json
-if (rawArgv[0] === 'init') {
-  process.exit(await runInit());
+/** The create flow (wizard in a TTY, plan/apply otherwise). Shared by the default command and `add`. */
+async function createRun(ctx: Ctx): Promise<void> {
+  const values = ctx.values;
+  const selectors = selectorsOf(ctx);
+  const interactive = !!process.stdout.isTTY && !values.yes && !values['dry-run'];
+  const code = interactive ? await runWizard(values, selectors) : runPlain(values, selectors);
+  if (code) process.exitCode = code;
 }
+
+// Default command (`fledgling`, no subcommand) → the interactive wizard.
+const entry = {
+  name: 'fledgling',
+  description: 'Claim package names and set up trusted publishing',
+  args,
+  run: createRun,
+};
+
+const addCommand = {
+  name: 'add',
+  description: 'Claim names + set up trusted publishing for the given packages',
+  args,
+  run: createRun,
+};
+
+const syncCommand = {
+  name: 'sync',
+  description: 'Reconcile trusted publishing on npm with your config',
+  args,
+  async run(ctx: Ctx) {
+    const code = await runSync(ctx.values, selectorsOf(ctx));
+    if (code) process.exitCode = code;
+  },
+};
+
+const initCommand = {
+  name: 'init',
+  description: 'Write trusted-publishing config to your package.json',
+  async run() {
+    const code = await runInit();
+    if (code) process.exitCode = code;
+  },
+};
+
+const rawArgv = process.argv.slice(2);
 
 // shell completion (`fledgling complete …`) is handled by @bomb.sh/tab, before gunshi
 if (maybeHandleCompletion(rawArgv)) {
   process.exit(0);
 }
 
-// `fledgling sync` — reconcile trusted publishing across every package (trust only)
-const isSync = rawArgv[0] === 'sync';
-const argv = isSync ? rawArgv.slice(1) : rawArgv;
-
-await cli(
-  argv,
-  {
-    name: 'fledgling',
-    description: '🐣 Create and set up packages on npm with trusted publishing',
-    args,
-    async run(ctx) {
-      const selectors = (ctx.positionals ?? []) as string[];
-      const values = ctx.values as Record<string, any>;
-      if (isSync) {
-        const code = await runSync(values, selectors);
-        if (code) process.exitCode = code;
-        return;
-      }
-      const interactive = !!process.stdout.isTTY && !values.yes && !values['dry-run'];
-      const code = interactive ? await runWizard(values, selectors) : runPlain(values, selectors);
-      if (code) process.exitCode = code;
-    },
-  },
-  {
+try {
+  await cli(rawArgv, entry, {
     name: 'fledgling',
     version: VERSION,
     description: '🐣 Create and set up packages on npm with trusted publishing',
+    subCommands: { add: addCommand, sync: syncCommand, init: initCommand },
     renderHeader: null, // no auto-printed banner on every run
-  },
-);
+  });
+} catch (e) {
+  const m = (e as Error).message?.match(/Command not found: (.+)/);
+  if (m) {
+    console.error(pc.red(`Unknown command '${m[1].trim()}'.`));
+    console.error(pc.dim(`To set up a package by name, run: fledgling add ${m[1].trim()}`));
+    process.exitCode = 1;
+  } else {
+    throw e;
+  }
+}

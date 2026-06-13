@@ -119,8 +119,12 @@ export async function runWizard(values: Record<string, any>, selectors: string[]
   let vcsOrigin: string | undefined = values['vcs-origin'] ?? config.vcsOrigin;
   const contextIds: string[] | undefined = values['context-id'] ?? config.contextIds;
 
-  if (!skipTrust) {
-    const wantsTrust = await p.confirm({ message: 'Set up trusted publishing (OIDC)?', initialValue: true });
+  // Only ask about trusted publishing when claiming a bare name (no repo/CI context yet).
+  // For packages already in your repo it's the whole point, so set it up by default
+  // (opt out with --skip-trust or `"trust": false` in config).
+  const nameOnly = targets.every(t => !discovered.includes(t));
+  if (!skipTrust && nameOnly) {
+    const wantsTrust = await p.confirm({ message: 'Also set up trusted publishing for it?', initialValue: false });
     if (cancelled(wantsTrust)) return cancel();
     skipTrust = !wantsTrust;
   }

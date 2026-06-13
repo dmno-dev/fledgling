@@ -14,13 +14,22 @@ Brought to you by [Varlock](https://varlock.dev) 🧙‍♂️🔐 — [check it
 Designed to be run with `npx` (or `bunx` / `pnpm dlx`):
 
 ```sh
-npx fledgling                            # interactive walkthrough (in a terminal)
-npx fledgling my-great-new-idea --new    # claim a brand-new name, nothing in the repo yet
-npx fledgling "*" --yes                  # every package in a monorepo
-npx fledgling "@scope/utils-*" --yes     # accepts globs
+npx fledgling                                # interactive walkthrough (in a terminal)
+npx fledgling add my-great-new-idea --new    # claim a brand-new name, nothing in the repo yet
+npx fledgling add "*" --yes                  # every package in a monorepo (globs ok)
+npx fledgling sync                           # reconcile trusted publishing to your config
 ```
 
-Run it in a terminal and you get an interactive wizard (powered by [clack](https://github.com/bombshell-dev/clack)); pass `--yes` (or run in CI) and it goes non-interactive.
+Run bare `fledgling` in a terminal and you get an interactive wizard (powered by [clack](https://github.com/bombshell-dev/clack)); pass packages to `add` (or `--yes` / run in CI) and it goes non-interactive.
+
+### Commands
+
+| Command | What it does |
+|---------|--------------|
+| `fledgling` | Interactive wizard (the default) |
+| `fledgling add [packages…]` | Claim names + set up trusted publishing for the given packages |
+| `fledgling sync` | Reconcile trusted publishing on npm with your config |
+| `fledgling init` | Write the trusted-publishing config to your `package.json` |
 
 ## Why
 
@@ -110,17 +119,19 @@ To skip trusted publishing entirely and only reserve package names, you can:
 ## Usage
 
 ```sh
-npx fledgling [packages...] [options]
+npx fledgling add [packages...] [options]
 ```
 
-With no package arguments, `fledgling` targets **every public package** in your workspace. Pass names or globs to narrow it down:
+With no package arguments, `add` targets **every public package** in your workspace. Pass names or globs to narrow it down:
 
 ```sh
-npx fledgling my-pkg --yes              # one package
-npx fledgling "@scope/*" --yes          # a glob (quote it)
-npx fledgling "*-plugin" --yes          # all the plugins
-npx fledgling @scope/brand-new --new --yes   # claim a name that doesn't exist locally yet
+npx fledgling add my-pkg --yes              # one package
+npx fledgling add "@scope/*" --yes          # a glob (quote it)
+npx fledgling add "*-plugin" --yes          # all the plugins
+npx fledgling add @scope/brand-new --new --yes   # claim a name that doesn't exist locally yet
 ```
+
+Running bare `npx fledgling` (no subcommand) in a terminal drops you into the same flow interactively.
 
 ### Run options
 
