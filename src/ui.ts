@@ -21,10 +21,17 @@ export async function hatchIntro(title: string): Promise<void> {
     out.write(`${introLine(`🐥 ${pc.cyan(title)}`)}\n`);
     return;
   }
-  for (const egg of ['🥚', '🥚', '🥚', '🐣', '🐣', '🐥']) {
+  // egg rocks back and forth (constant-width frames so \r redraws clean)…
+  for (const egg of ['🥚 ', ' 🥚', '🥚 ', ' 🥚', '🥚 ', ' 🥚', '🥚 ']) {
     out.write(`\r${introLine(egg)}`);
-    await sleep(150);
+    await sleep(105);
   }
+  // …then cracks and hatches
+  for (const egg of ['🐣 ', '🐣 ', '🐥 ']) {
+    out.write(`\r${introLine(egg)}`);
+    await sleep(210);
+  }
+  // title types out letter by letter after the chick
   for (let i = 0; i <= title.length; i++) {
     out.write(`\r${introLine(`🐥 ${pc.cyan(title.slice(0, i))}`)}`);
     await sleep(55);
