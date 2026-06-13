@@ -32,10 +32,22 @@ export interface TrustOptions {
   contextIds?: string[];
 }
 
+/** A trusted-publisher config as returned by `npm trust list --json`. */
 export interface TrustEntry {
   id?: string;
-  type?: string;
-  permissions?: string[];
+  type?: string; // github | gitlab | circleci
+  permissions?: string[]; // createPackage | createStagedPackage
+  // github / gitlab
+  file?: string;
+  repository?: string; // github
+  project?: string; // gitlab
+  environment?: string;
+  // circleci
+  orgId?: string;
+  projectId?: string;
+  pipelineDefinitionId?: string;
+  vcsOrigin?: string;
+  contextIds?: string[];
 }
 
 /** Append `--registry <url>` when one is configured. */

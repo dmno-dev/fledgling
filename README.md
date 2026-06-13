@@ -158,9 +158,9 @@ Both steps are skipped when already done. Placeholders are packed from a throwaw
 
 ## `fledgling sync` — reconcile trusted publishing
 
-Where the default command focuses on **new** packages (and hides already-published ones), `fledgling sync` is the opposite: it ensures **trusted publishing is set up on every package**.
+Where the default command focuses on **new** packages (and hides already-published ones), `fledgling sync` reconciles **trusted publishing across every package** against your `fledgling` config.
 
-It authenticates, checks each package's actual trust status, shows you what's missing, and asks before configuring it:
+It authenticates, reads each package's actual config on npm, and shows what's **not configured** or **out of sync** — with the exact difference (e.g. `environment publish → (none)`) — then asks before fixing it to match your config:
 
 ```sh
 fledgling sync            # auth, check, then confirm + apply

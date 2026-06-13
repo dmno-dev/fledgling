@@ -1,6 +1,14 @@
 import type { Pkg } from './workspace.js';
 import { discoverPackages, findWorkspaceRoot } from './workspace.js';
-import { packageExists, listTrust, revokeTrust, publishPlaceholder, configureTrust, type TrustOptions } from './npm.js';
+import {
+  packageExists,
+  listTrust,
+  revokeTrust,
+  publishPlaceholder,
+  configureTrust,
+  type TrustOptions,
+  type TrustEntry,
+} from './npm.js';
 import type { Permission, Provider, FledglingConfig } from './config.js';
 
 export interface Settings {
@@ -92,6 +100,57 @@ export function toTrustOptions(s: Settings): TrustOptions {
     vcsOrigin: s.vcsOrigin,
     contextIds: s.contextIds,
   };
+}
+
+// --- drift detection: compare an existing remote config to the desired settings ---
+
+const PERMS: Record<Permission, string[]> = {
+  publish: ['createPackage'],
+  stage: ['createStagedPackage'],
+  both: ['createPackage', 'createStagedPackage'],
+};
+const eq = (a: string | undefined, b: string | undefined) => (a || undefined) === (b || undefined);
+const sameList = (a: string[] | undefined, b: string[] | undefined) =>
+  [...(a ?? [])].sort().join(',') === [...(b ?? [])].sort().join(',');
+
+/** Does an existing trusted-publisher config match the desired settings? */
+export function trustMatches(e: TrustEntry, s: Settings): boolean {
+  if (e.type !== s.provider) return false;
+  if (!sameList(e.permissions, PERMS[s.permissions])) return false;
+  if (s.provider === 'circleci') {
+    return (
+      eq(e.orgId, s.orgId) &&
+      eq(e.projectId, s.projectId) &&
+      eq(e.pipelineDefinitionId, s.pipelineDefinitionId) &&
+      eq(e.vcsOrigin, s.vcsOrigin) &&
+      sameList(e.contextIds, s.contextIds)
+    );
+  }
+  const entity = s.provider === 'gitlab' ? e.project : e.repository;
+  return eq(entity, s.repo) && eq(e.file, s.workflow) && eq(e.environment, s.env);
+}
+
+/** Human-readable "remote → desired" list of what differs. */
+export function describeTrustDiff(e: TrustEntry, s: Settings): string[] {
+  const f = (v: string | undefined) => v || '(none)';
+  const d: string[] = [];
+  if (e.type !== s.provider) d.push(`provider ${f(e.type)} → ${s.provider}`);
+  if (!sameList(e.permissions, PERMS[s.permissions])) {
+    d.push(`permissions ${(e.permissions ?? []).join('+') || '(none)'} → ${s.permissions}`);
+  }
+  if (s.provider === 'circleci') {
+    if (!eq(e.orgId, s.orgId)) d.push(`org-id ${f(e.orgId)} → ${f(s.orgId)}`);
+    if (!eq(e.projectId, s.projectId)) d.push(`project-id ${f(e.projectId)} → ${f(s.projectId)}`);
+    if (!eq(e.pipelineDefinitionId, s.pipelineDefinitionId)) d.push(`pipeline-id ${f(e.pipelineDefinitionId)} → ${f(s.pipelineDefinitionId)}`);
+    if (!eq(e.vcsOrigin, s.vcsOrigin)) d.push(`vcs-origin ${f(e.vcsOrigin)} → ${f(s.vcsOrigin)}`);
+    if (!sameList(e.contextIds, s.contextIds)) d.push('context-ids differ');
+  } else {
+    const entity = s.provider === 'gitlab' ? e.project : e.repository;
+    if (!eq(entity, s.repo)) d.push(`repo ${f(entity)} → ${f(s.repo)}`);
+    if (!eq(e.file, s.workflow)) d.push(`workflow ${f(e.file)} → ${f(s.workflow)}`);
+    if (!eq(e.environment, s.env)) d.push(`environment ${f(e.environment)} → ${f(s.env)}`);
+  }
+  return d;
 }
 
 export type StepStatus = 'done' | 'skip' | 'fail' | 'na';
