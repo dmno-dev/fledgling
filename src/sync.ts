@@ -50,12 +50,17 @@ export async function runSync(values: Record<string, any>, selectors: string[]):
 
   // trusted publishing can only be configured for packages that exist on npm
   const checkSpin = p.spinner();
-  checkSpin.start('Checking which packages are on npm');
+  checkSpin.start('Checking packages exist on npm…');
   const published = await publishedNames(
     targets.map(t => t.name),
     settings.registry,
   );
-  checkSpin.stop(`${published.size} of ${targets.length} on npm`);
+  const notYet = targets.length - published.size;
+  checkSpin.stop(
+    notYet === 0
+      ? `All ${targets.length} package(s) exist on npm`
+      : `${notYet} of ${targets.length} package(s) not on npm yet`,
+  );
   const unpublished = targets.filter(t => !published.has(t.name));
   if (unpublished.length) {
     p.log.warn(
