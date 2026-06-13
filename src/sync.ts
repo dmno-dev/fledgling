@@ -12,7 +12,7 @@ import {
   describeConfig,
 } from './core.js';
 import { loadConfig } from './config.js';
-import { hatchSpinner } from './ui.js';
+import { hatchSpinner, hatch } from './ui.js';
 
 /**
  * `fledgling sync` — reconcile trusted publishing across the workspace.
@@ -21,6 +21,7 @@ import { hatchSpinner } from './ui.js';
  */
 export async function runSync(values: Record<string, any>, selectors: string[]): Promise<number> {
   console.log();
+  await hatch();
   p.intro(pc.inverse(pc.cyan(' 🐣 fledgling sync ')));
 
   const root = findWorkspaceRoot();

@@ -13,13 +13,14 @@ import {
   type TrustView,
 } from './core.js';
 import { loadConfig, type Permission, type Provider } from './config.js';
-import { hatchSpinner } from './ui.js';
+import { hatchSpinner, hatch } from './ui.js';
 
 const cancelled = (v: unknown): boolean => p.isCancel(v);
 
 /** Interactive walkthrough: scan → pick → configure → confirm → apply. */
 export async function runWizard(values: Record<string, any>, selectors: string[]): Promise<number> {
   console.log();
+  await hatch();
   p.intro(pc.inverse(pc.cyan(' 🐣 fledgling ')));
 
   const root = findWorkspaceRoot();

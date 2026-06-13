@@ -130,5 +130,6 @@ await cli(
     name: 'fledgling',
     version: VERSION,
     description: '🐣 Create and set up packages on npm with trusted publishing',
+    renderHeader: null, // no auto-printed banner on every run
   },
 );

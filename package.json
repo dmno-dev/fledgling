@@ -47,5 +47,8 @@
     "@types/node": "^25.0.0",
     "tsdown": "^0.22.2",
     "typescript": "^6.0.3"
+  },
+  "fledgling": {
+    "environment": "publish"
   }
 }
