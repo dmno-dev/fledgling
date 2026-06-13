@@ -4,6 +4,9 @@ import { setTimeout as sleep } from 'node:timers/promises';
 
 const BAR_START = '┌'; // ┌  (matches clack's intro)
 
+/** Style a runnable command so it reads as a command, not prose. */
+export const cmd = (s: string): string => pc.cyan(pc.bold(s));
+
 /** A spinner that hatches: 🥚 → 🐣 → 🐥. */
 export const hatchSpinner = () => p.spinner({ frames: ['🥚', '🥚', '🐣', '🐣', '🐥'], delay: 180 });
 

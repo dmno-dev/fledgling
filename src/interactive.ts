@@ -13,7 +13,7 @@ import {
   type TrustView,
 } from './core.js';
 import { loadConfig, type Permission, type Provider } from './config.js';
-import { hatchSpinner, hatchIntro } from './ui.js';
+import { hatchSpinner, hatchIntro, cmd } from './ui.js';
 
 const cancelled = (v: unknown): boolean => p.isCancel(v);
 
@@ -72,8 +72,8 @@ export async function runWizard(values: Record<string, any>, selectors: string[]
   if (!onlyTrust && fresh.length === 0) {
     p.note(
       `Everything here is already on npm, so there's nothing to claim.\n` +
-        `To reconcile trusted publishing, run ${pc.bold('fledgling sync')}.`,
-      'Nothing to claim',
+        `To reconcile trusted publishing, run ${cmd('fledgling sync')}.`,
+      'Nothing to hatch',
     );
     p.outro(pc.green('All set 🐣'));
     return 0;
@@ -103,7 +103,7 @@ export async function runWizard(values: Record<string, any>, selectors: string[]
     }
   } else {
     if (published.size) {
-      p.log.info(pc.dim(`${published.size} already on npm — hidden. Use \`fledgling sync\` to (re)configure their trust.`));
+      p.log.info(`${pc.dim(`${published.size} already on npm — hidden. Use`)} ${cmd('fledgling sync')} ${pc.dim('to (re)configure their trust.')}`);
     }
     if (selectors.length === 0 && fresh.length > 1) {
       const picked = await pick(fresh, 'New packages to set up:');
