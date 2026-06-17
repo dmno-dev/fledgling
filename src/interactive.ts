@@ -1,19 +1,20 @@
 import * as p from '@clack/prompts';
 import pc from 'picocolors';
 import { findWorkspaceRoot, discoverPackages, detectRepo, type Pkg } from './workspace.js';
-import { npmWhoami, publishedNames, trustReadable } from './npm.js';
+import { npmWhoami, publishedNames, warmNpmAuth } from './npm.js';
 import {
   resolveTargets,
   processTarget,
   summarize,
   describeConfig,
+  applyIgnore,
   type Settings,
   type Reporter,
   type TargetResult,
   type TrustView,
 } from './core.js';
 import { loadConfig, type Permission, type Provider } from './config.js';
-import { hatchSpinner, hatchIntro, cmd } from './ui.js';
+import { hatchSpinner, hatchIntro, cmd, otpBoxReminder, note } from './ui.js';
 
 const cancelled = (v: unknown): boolean => p.isCancel(v);
 
@@ -25,11 +26,25 @@ export async function runWizard(values: Record<string, any>, selectors: string[]
   const root = findWorkspaceRoot();
   const config = loadConfig(root);
   const registry: string | undefined = values.registry ?? config.registry;
+  // Claiming explicit `--new` names isn't about the local workspace, so skip the
+  // "Found N · repo" framing — but still discover packages (to resolve the names) and
+  // detect the repo (used as the trusted-publishing default if you opt in).
+  const newClaim = !!values.new;
   const spin = hatchSpinner();
-  spin.start('Scanning workspace');
-  const discovered = discoverPackages(root);
+  if (!newClaim) spin.start('Scanning workspace');
+  const discovered = applyIgnore(discoverPackages(root), config.ignore);
   const repoInfo = detectRepo(root);
-  spin.stop(`Found ${pc.bold(String(discovered.length))} package(s)${repoInfo ? ` · ${pc.dim(repoInfo.slug)}` : ''}`);
+  if (!newClaim) {
+    spin.stop(`Found ${pc.bold(String(discovered.length))} package(s)${repoInfo ? ` · ${pc.dim(repoInfo.slug)}` : ''}`);
+  } else if (selectors.length) {
+    p.log.step(`Claiming new package${selectors.length > 1 ? 's' : ''}: ${selectors.map(s => `📦 ${pc.cyan(s)}`).join(', ')}`);
+  }
+
+  // Check login up front (per-registry) so we can flag it before any prompts. We don't
+  // hard-stop — without a login we still walk through and show a dry-run preview.
+  const who = npmWhoami(registry);
+  if (who) p.log.info(`Logged in to npm as ${pc.green(who)}`);
+  else p.log.warn(pc.yellow('Not logged in to npm — run `npm login` (with 2FA) to apply. This run will be a dry run.'));
 
   // --- choose targets ---
   const onlyTrust = !!values['skip-publish'];
@@ -53,24 +68,39 @@ export async function runWizard(values: Record<string, any>, selectors: string[]
 
   // See what's already on npm. Claiming is only for names that don't exist yet — so
   // if everything here is already published there's nothing to claim, and the user
-  // probably wants `fledgling sync` to reconcile trusted publishing instead.
+  // probably wants `fledgling sync` to reconcile trusted publishing instead. In
+  // `--new` mode the count is redundant (we'll either say it's taken or start claiming),
+  // so check quietly there.
   const checkSpin = hatchSpinner();
-  checkSpin.start('Checking which packages are already on npm…');
+  if (!newClaim) checkSpin.start('Checking which packages are already on npm…');
   const published = await publishedNames(
     targets.map(t => t.name),
     registry,
   );
-  checkSpin.stop(
-    published.size === 0
-      ? `None on npm yet — ${targets.length} to claim`
-      : published.size === targets.length
-        ? `All ${targets.length} already on npm`
-        : `${published.size} of ${targets.length} already on npm`,
-  );
+  if (!newClaim) {
+    checkSpin.stop(
+      published.size === 0
+        ? `None on npm yet — ${targets.length} to claim`
+        : published.size === targets.length
+          ? `All ${targets.length} already on npm`
+          : `${published.size} of ${targets.length} already on npm`,
+    );
+  }
   const fresh = targets.filter(t => !published.has(t.name));
 
   if (!onlyTrust && fresh.length === 0) {
-    p.note(
+    // If the user explicitly asked to claim brand-new names (`--new`) and they're taken,
+    // say so plainly — don't imply they're workspace packages to sync.
+    const taken = targets.filter(t => t.isNew);
+    if (taken.length) {
+      note(
+        `${taken.map(t => `📦 ${pc.cyan(t.name)}`).join(', ')} ${taken.length > 1 ? 'are' : 'is'} already taken on npm — ` +
+          `can't claim ${taken.length > 1 ? 'those names' : 'that name'}.`,
+        '🛑 Name taken',
+      );
+      return 1;
+    }
+    note(
       `Everything here is already on npm, so there's nothing to claim.\n` +
         `To reconcile trusted publishing, run ${cmd('fledgling sync')}.`,
       'Nothing to hatch',
@@ -163,9 +193,9 @@ export async function runWizard(values: Record<string, any>, selectors: string[]
   }
 
   // --- plan + confirm ---
-  p.note(
+  note(
     [
-      `${pc.bold(String(targets.length))} package(s): ${pc.dim(targets.map(t => t.name).join(', '))}`,
+      `${pc.bold(String(targets.length))} package(s): ${targets.map(t => `📦 ${pc.cyan(t.name)}`).join(', ')}`,
       skipPublish ? '' : pc.green('• claim unpublished names on npm'),
       skipTrust ? '' : pc.green('• set up trusted publishing'),
     ]
@@ -175,20 +205,18 @@ export async function runWizard(values: Record<string, any>, selectors: string[]
   );
   if (!skipTrust) {
     const view: TrustView = { provider, permissions, registry, repo, workflow, env, orgId, projectId, pipelineDefinitionId, vcsOrigin, contextIds };
-    p.note(
+    note(
       `${describeConfig(view)}\n\n${pc.italic(pc.dim('Change these with `fledgling init`'))}`,
       'Trusted publishing settings',
     );
   }
 
-  const who = npmWhoami();
+  // `who` was resolved up front; not logged in → dry-run preview only (already warned).
   let apply = false;
   if (who) {
     const ans = await p.confirm({ message: `Apply now as ${pc.green(who)}?`, initialValue: true });
     if (cancelled(ans)) return cancel();
     apply = !!ans;
-  } else {
-    p.log.warn(pc.yellow('Not logged in to npm — applying needs `npm login` (with 2FA). Showing a dry run.'));
   }
 
   const settings: Settings = {
@@ -210,22 +238,22 @@ export async function runWizard(values: Record<string, any>, selectors: string[]
     version: values['placeholder-version'] ?? '0.0.0',
     tag: values.tag,
     otp: values.otp,
+    otpSecret: values['otp-secret'] ?? process.env.FLEDGLING_OTP_SECRET,
   };
 
-  // trusted publishing needs an OTP on 2FA accounts — ask if reads aren't working
-  if (apply && !skipTrust && !trustReadable(targets[0].name, registry, settings.otp)) {
-    p.log.warn('npm requires a 2FA one-time password to set up trusted publishing.');
-    for (let tries = 0; tries < 3; tries++) {
-      const code = await p.password({
-        message: `npm one-time password (2FA code) for ${who}:`,
-        validate: x => (/^\d{6,}$/.test((x ?? '').trim()) ? undefined : 'Enter your 6-digit code'),
-      });
-      if (cancelled(code)) return cancel();
-      settings.otp = String(code).trim();
-      if (trustReadable(targets[0].name, registry, settings.otp)) break;
-      p.log.error(pc.red('That code did not work.'));
-      if (tries === 2) {
-        p.cancel(pc.red('Could not authenticate.'));
+  // npm manages 2FA itself — an interactive browser approval, cached ~5 min. When we
+  // publish, the claim's `npm publish` warms that cache for the trust write seconds
+  // later, so neither re-prompts. When we're only setting up trust (no claim), nothing
+  // has authenticated yet and our trust reads can't prompt — so warm the cache once
+  // here against an existing package. (Skipped when --otp / --otp-secret was passed.)
+  const interactiveAuth = apply && !settings.otp && !settings.otpSecret;
+  if (interactiveAuth && (!skipTrust || !skipPublish)) p.log.info(otpBoxReminder);
+  if (interactiveAuth && !skipTrust && skipPublish) {
+    const existing = targets.find(t => published.has(t.name));
+    if (existing) {
+      p.log.step('Authenticating with npm — a browser window may open to approve 2FA…');
+      if (!warmNpmAuth(existing.name, registry)) {
+        p.cancel(pc.red('Could not authenticate with npm.'));
         return 1;
       }
     }

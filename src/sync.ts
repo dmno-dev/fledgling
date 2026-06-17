@@ -1,7 +1,7 @@
 import * as p from '@clack/prompts';
 import pc from 'picocolors';
 import { findWorkspaceRoot, discoverPackages, detectRepo, type Pkg } from './workspace.js';
-import { npmWhoami, listTrust, configureTrust, revokeTrust, trustReadable, publishedNames, isOtpError } from './npm.js';
+import { npmWhoami, listTrust, configureTrust, revokeTrust, warmNpmAuth, publishedNames } from './npm.js';
 import {
   resolveTargets,
   validateTrustSettings,
@@ -10,9 +10,10 @@ import {
   trustMatches,
   describeTrustDiff,
   describeConfig,
+  applyIgnore,
 } from './core.js';
 import { loadConfig } from './config.js';
-import { hatchSpinner, hatchIntro } from './ui.js';
+import { hatchSpinner, hatchIntro, otpBoxReminder, note } from './ui.js';
 
 /**
  * `fledgling sync` — reconcile trusted publishing across the workspace.
@@ -26,7 +27,18 @@ export async function runSync(values: Record<string, any>, selectors: string[]):
   const root = findWorkspaceRoot();
   const config = loadConfig(root);
   const repo = values.repo ?? detectRepo(root)?.slug;
-  const discovered = discoverPackages(root);
+
+  // sync reads and writes live trust config, so it needs to be logged in — check up
+  // front (per-registry) before any scanning, so we fail fast with a clear message.
+  const registry = values.registry ?? config.registry;
+  const who = npmWhoami(registry);
+  if (!who) {
+    p.cancel(pc.red('Not logged in to npm. Run `npm login` (with 2FA) and retry.'));
+    return 1;
+  }
+  p.log.info(`Logged in to npm as ${pc.green(who)}`);
+
+  const discovered = applyIgnore(discoverPackages(root), config.ignore);
 
   const resolved = resolveTargets(discovered, selectors, false, root);
   if (resolved.error) {
@@ -47,7 +59,7 @@ export async function runSync(values: Record<string, any>, selectors: string[]):
     return 1;
   }
 
-  p.note(describeConfig(settings), 'Syncing trust settings');
+  note(describeConfig(settings), 'Syncing trust settings');
 
   // trusted publishing can only be configured for packages that exist on npm
   const checkSpin = hatchSpinner();
@@ -75,52 +87,25 @@ export async function runSync(values: Record<string, any>, selectors: string[]):
     return 0;
   }
 
-  const who = npmWhoami();
-  if (!who) {
-    p.cancel(pc.red('Not logged in to npm. Run `npm login` and retry.'));
-    return 1;
-  }
-  p.log.info(`Logged in to npm as ${pc.green(who)}`);
-
-  // Prompt for a fresh npm 2FA one-time password. Used both up front and mid-run
-  // (TOTP codes are short-lived, so a long sync can outlive the one we started with).
-  const CANCELLED = Symbol('cancelled');
-  const askOtp = async (): Promise<string | typeof CANCELLED> => {
-    const code = await p.password({
-      message: `npm one-time password (2FA code) for ${who}:`,
-      validate: x => (/^\d{6,}$/.test((x ?? '').trim()) ? undefined : 'Enter your 6-digit code'),
-    });
-    if (p.isCancel(code)) return CANCELLED;
-    return String(code).trim();
-  };
-
-  // `npm trust` needs an OTP on 2FA accounts (and it doesn't prompt — it errors).
-  // Ask for one if reads aren't working without it.
-  let otp = settings.otp;
-  if (!trustReadable(targets[0].name, settings.registry, otp)) {
-    p.log.warn('npm requires a 2FA one-time password to read and manage trusted publishing.');
-    for (let tries = 0; tries < 3; tries++) {
-      const code = await askOtp();
-      if (code === CANCELLED) {
-        p.cancel('Cancelled.');
-        return 1;
-      }
-      otp = code;
-      if (trustReadable(targets[0].name, settings.registry, otp)) break;
-      p.log.error(pc.red('That code did not work.'));
-      if (tries === 2) {
-        p.cancel(pc.red('Could not authenticate.'));
-        return 1;
-      }
+  // Reading and managing trusted publishing needs 2FA. npm does this interactively (a
+  // browser approval, cached ~5 min), but our trust *reads* capture stdout to parse
+  // their JSON, so they can't surface that prompt themselves. Warm npm's session cache
+  // once here with an interactive call, so the reads and writes that follow ride it.
+  // (Skipped when --otp / --otp-secret was passed — the non-interactive escape hatch.)
+  if (!settings.otp && !settings.otpSecret) {
+    p.log.info(otpBoxReminder);
+    p.log.step('Authenticating with npm — a browser window may open to approve 2FA…');
+    if (!warmNpmAuth(targets[0].name, settings.registry)) {
+      p.cancel(pc.red('Could not authenticate with npm.'));
+      return 1;
     }
   }
-  settings.otp = otp;
 
   p.log.step(`Checking trusted publishing for ${pc.bold(String(targets.length))} package(s)…`);
 
   type Item = { t: Pkg; status: 'in-sync' | 'drift' | 'missing'; diff?: string[] };
   const items: Item[] = targets.map(t => {
-    const entries = listTrust(t.name, settings.registry, otp);
+    const entries = listTrust(t.name, settings.registry, settings);
     if (!entries.length) return { t, status: 'missing' };
     if (trustMatches(entries[0], settings)) return { t, status: 'in-sync' };
     return { t, status: 'drift', diff: describeTrustDiff(entries[0], settings) };
@@ -136,18 +121,20 @@ export async function runSync(values: Record<string, any>, selectors: string[]):
     return 0;
   }
 
-  p.note(
-    [
-      inSync ? pc.dim(`${inSync} in sync`) : '',
-      missing.length ? `${pc.yellow(String(missing.length))} not configured:` : '',
-      ...missing.map(i => `  ${pc.green('+')} ${i.t.name}`),
-      drift.length ? `${pc.yellow(String(drift.length))} out of sync:` : '',
-      ...drift.map(i => `  ${pc.yellow('~')} ${i.t.name} ${pc.dim(`(${(i.diff ?? []).join(', ')})`)}`),
-    ]
-      .filter(Boolean)
-      .join('\n'),
-    'Trust status',
-  );
+  const statusLines: string[] = [];
+  if (inSync) statusLines.push(pc.green(`✓ ${inSync} in sync`));
+  if (missing.length) {
+    statusLines.push(pc.yellow(`${missing.length} not configured:`));
+    for (const i of missing) statusLines.push(`  ${pc.green('+')} ${pc.cyan(i.t.name)}`);
+  }
+  if (drift.length) {
+    statusLines.push(pc.yellow(`${drift.length} out of sync:`));
+    for (const i of drift) {
+      statusLines.push(`  ${pc.yellow('~')} ${pc.cyan(i.t.name)}`);
+      for (const change of i.diff ?? []) statusLines.push(`      ${change}`);
+    }
+  }
+  note(statusLines.join('\n'), 'Trust status');
 
   const apply = values.yes
     ? true
@@ -161,13 +148,13 @@ export async function runSync(values: Record<string, any>, selectors: string[]):
     return 0;
   }
 
-  // Apply one package's fix. Returns true on success. Throws OTP errors up so the
-  // caller can re-prompt and retry — TOTP codes expire, so a long run may need a new one.
+  // Apply one package's fix. npm prompts for (cached) 2FA itself if its session has
+  // lapsed mid-run, so there's no OTP bookkeeping to do here.
   const applyOne = (i: Item): void => {
     if (i.status === 'drift') {
       // npm allows one config per package — revoke the existing one, then re-create
-      for (const e of listTrust(i.t.name, settings.registry, otp)) {
-        if (e.id) revokeTrust(i.t.name, e.id, settings.registry, otp);
+      for (const e of listTrust(i.t.name, settings.registry, settings)) {
+        if (e.id) revokeTrust(i.t.name, e.id, settings.registry, settings);
       }
     }
     configureTrust(i.t.name, toTrustOptions(settings));
@@ -176,31 +163,13 @@ export async function runSync(values: Record<string, any>, selectors: string[]):
   let failed = 0;
   let fixed = 0;
   for (const i of todo) {
-    let retriedOtp = false;
-    for (;;) {
-      try {
-        applyOne(i);
-        p.log.success(`${i.t.name} — ${i.status === 'drift' ? 'updated' : 'configured'} trust`);
-        fixed++;
-        break;
-      } catch (e) {
-        // an expired/invalid OTP mid-run: ask for a fresh code and retry this package once
-        if (isOtpError(e) && !retriedOtp) {
-          retriedOtp = true;
-          p.log.warn('Your 2FA code expired — enter a fresh one to continue.');
-          const code = await askOtp();
-          if (code === CANCELLED) {
-            p.cancel(pc.red('Cancelled — some packages may not be synced.'));
-            return failed > 0 || fixed < todo.length ? 1 : 0;
-          }
-          otp = code;
-          settings.otp = otp;
-          continue;
-        }
-        p.log.error(`${i.t.name} — failed: ${(e as Error).message}`);
-        failed++;
-        break;
-      }
+    try {
+      applyOne(i);
+      p.log.success(`${i.t.name} — ${i.status === 'drift' ? 'updated' : 'configured'} trust`);
+      fixed++;
+    } catch (e) {
+      p.log.error(`${i.t.name} — failed: ${(e as Error).message}`);
+      failed++;
     }
   }
   p.outro(failed ? pc.red(`Done with ${failed} failure(s).`) : pc.green(`Synced ${fixed} package(s) 🐣`));

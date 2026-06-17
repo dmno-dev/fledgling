@@ -7,6 +7,19 @@ const BAR_START = '┌'; // ┌  (matches clack's intro)
 /** Style a runnable command so it reads as a command, not prose. */
 export const cmd = (s: string): string => pc.cyan(pc.bold(s));
 
+/**
+ * Like clack's `note`, but without its default behavior of dimming the whole body —
+ * we color our own content, so render each line as-is and let explicit `pc.dim`
+ * (e.g. `(none)`, footnotes) be the only dimmed bits.
+ */
+export const note = (message: string, title?: string): void =>
+  p.note(message, title, { format: line => line });
+
+/** Heads-up shown before npm's interactive 2FA, so one approval covers the whole run. */
+export const otpBoxReminder =
+  `npm will open your browser to approve 2FA — tick ${pc.bold(`"don't ask again for 5 minutes"`)} ` +
+  `so it won't prompt again for every package.`;
+
 /** A spinner that hatches: 🥚 → 🐣 → 🐥. */
 export const hatchSpinner = () => p.spinner({ frames: ['🥚', '🥚', '🐣', '🐣', '🐥'], delay: 180 });
 

@@ -5,11 +5,15 @@
 [![node](https://img.shields.io/node/v/fledgling)](https://www.npmjs.com/package/fledgling)
 [![license](https://img.shields.io/npm/l/fledgling?color=blue)](./LICENSE)
 
-Brought to you by [Varlock](https://varlock.dev) 🧙‍♂️🔐 — [check it out to keep your secrets out of plaintext](https://varlock.dev).
-
 **Create and set up packages on npm with trusted publishing.**
 
+> Brought to you by [Varlock](https://varlock.dev) 🧙‍♂️🔐 — [check it out to keep your secrets out of plaintext](https://varlock.dev).
+
 `fledgling` claims your package name on npm and sets up token-less ([OIDC trusted](https://docs.npmjs.com/trusted-publishers/)) publishing — no `NPM_TOKEN`, no clicking through the npm website. It works for a single package or a whole monorepo, and it's idempotent, so you can re-run it any time you add a package.
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/dmno-dev/fledgling/main/images/demo.gif" alt="fledgling claiming a new package in a monorepo and setting up trusted publishing" width="760">
+</p>
 
 Designed to be run with `npx` (or `bunx` / `pnpm dlx`):
 
@@ -94,6 +98,23 @@ npx fledgling init
 
 Add `"registry"` to either block to target a non-default npm registry.
 
+### Excluding packages
+
+fledgling skips any package marked `"private": true`. To exclude **public** packages too —
+internal-but-published things you never want it to claim or manage trust for — add an
+`"ignore"` list of names or globs:
+
+```jsonc
+{
+  "fledgling": {
+    "ignore": ["@scope/internal-*", "playground"]
+  }
+}
+```
+
+Ignored packages are invisible to fledgling: they're left out of `add`, `sync`, `"*"`
+globs, and tab completion.
+
 ### Defaults
 
 | Option | Default | Notes |
@@ -145,7 +166,36 @@ Running bare `npx fledgling` (no subcommand) in a terminal drops you into the sa
 | `--force` | Replace an existing trusted publisher (revoke + re-create) |
 | `--placeholder-version <v>` | Placeholder version (default: `0.0.0`) |
 | `--tag <tag>` | dist-tag for placeholders (default: `latest`) |
-| `--otp <code>` | npm one-time password |
+| `--otp <code>` | npm 2FA one-time password, used for every npm call this run |
+| `--otp-secret <secret>` | TOTP secret to generate 2FA codes from as needed (also `$FLEDGLING_OTP_SECRET`) |
+
+### 2FA / one-time passwords
+
+npm requires 2FA to claim names and configure trusted publishing. By default fledgling
+just lets **npm handle it interactively** — it opens your browser to approve, and caches
+that approval for ~5 minutes, so one approval covers the whole run. When prompted, tick
+**"don't ask again for 5 minutes"** so it doesn't ask per-package.
+
+For non-interactive runs (CI, scripts) there's no browser, so pass a code yourself:
+
+- **`--otp <code>`** — a single one-time password, reused for every npm call in the run.
+- **`--otp-secret <secret>`** — your authenticator's TOTP secret (base32); fledgling
+  generates a fresh code for each npm call. Prefer the **`FLEDGLING_OTP_SECRET`** env var
+  over the flag so the secret doesn't land in your shell history or process list.
+
+Pull credentials straight from a password manager — e.g. 1Password's CLI (`op`). Read the
+**generated code** with `?attribute=otp` and pass it to `--otp`:
+
+```sh
+fledgling sync --otp "$(op read "op://Private/npm/Security/one-time password?attribute=otp")"
+```
+
+…or read the **secret itself** — the field's value with no attribute, an `otpauth://` URI —
+into `FLEDGLING_OTP_SECRET`, and fledgling mints a fresh code for every npm call:
+
+```sh
+FLEDGLING_OTP_SECRET="$(op read "op://Private/npm/Security/one-time password")" fledgling sync
+```
 
 ### Config flags
 
@@ -203,7 +253,7 @@ Then `fledgling <TAB>` completes the packages in your workspace.
 ## Requirements
 
 - **Node** ≥ 18
-- **npm** ≥ 11.10 (for `npm trust`)
+- **npm** ≥ 11.15.0 (for `npm trust` + OIDC/staged publishing)
 - `npm login` with **2FA enabled** for the trust step (npm requires it)
 
 Supports **npm / yarn / bun** (`workspaces`) and **pnpm** (`pnpm-workspace.yaml`) monorepos, plus single-package repos.

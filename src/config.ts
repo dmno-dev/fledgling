@@ -10,6 +10,8 @@ export type Provider = 'github' | 'gitlab' | 'circleci';
 export interface FledglingConfig {
   /** Set to false to skip trusted publishing by default (just claim names). */
   trust?: boolean;
+  /** Package names/globs to exclude from fledgling entirely (besides `"private": true`). */
+  ignore?: string[];
   provider?: Provider;
   permissions?: Permission;
   /** custom npm registry (defaults to the configured/default registry) */

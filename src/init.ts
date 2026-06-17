@@ -2,7 +2,7 @@ import * as p from '@clack/prompts';
 import pc from 'picocolors';
 import { findWorkspaceRoot, detectRepo } from './workspace.js';
 import { loadConfig, writeConfig, type FledglingConfig, type Permission, type Provider } from './config.js';
-import { hatchIntro } from './ui.js';
+import { hatchIntro, note } from './ui.js';
 
 const CANCEL = Symbol('cancel');
 /** Prompt for required text; returns the trimmed value or CANCEL. */
@@ -79,7 +79,7 @@ export async function runInit(): Promise<number> {
   if (registry) config.registry = registry;
 
   const file = writeConfig(root, config);
-  p.note(JSON.stringify({ fledgling: config }, null, 2), 'Saved');
+  note(JSON.stringify({ fledgling: config }, null, 2), 'Saved');
   p.outro(pc.green(`Wrote config to ${pc.dim(file)} — now just run ${pc.bold('npx fledgling')}`));
   return 0;
 }

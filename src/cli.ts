@@ -3,14 +3,15 @@ import { cli } from 'gunshi';
 import pc from 'picocolors';
 import { maybeHandleCompletion } from './completion.js';
 import { findWorkspaceRoot, discoverPackages, detectRepo } from './workspace.js';
-import { npmWhoami, trustReadable } from './npm.js';
-import { resolveTargets, processTarget, summarize, validateTrustSettings, buildSettings, type Reporter } from './core.js';
+import { npmWhoami, checkNpmVersion } from './npm.js';
+import { resolveTargets, processTarget, summarize, validateTrustSettings, buildSettings, applyIgnore, type Reporter } from './core.js';
 import { loadConfig } from './config.js';
 import { runWizard } from './interactive.js';
 import { runInit } from './init.js';
 import { runSync } from './sync.js';
 
-const VERSION = '0.0.0';
+declare const __VERSION__: string;
+const VERSION = __VERSION__;
 
 const args = {
   // run options (per invocation)
@@ -22,7 +23,8 @@ const args = {
   force: { type: 'boolean', description: 'Replace an existing trusted publisher (revoke + re-create)' },
   'placeholder-version': { type: 'string', default: '0.0.0', description: 'Placeholder version to publish' },
   tag: { type: 'string', description: 'dist-tag for placeholders' },
-  otp: { type: 'string', description: 'npm one-time password' },
+  otp: { type: 'string', description: 'npm 2FA one-time password (used for every npm call this run)' },
+  'otp-secret': { type: 'string', description: 'TOTP secret to generate 2FA codes from (use $FLEDGLING_OTP_SECRET to avoid shell history)' },
   // config — best set once in package.json "fledgling" (run `fledgling init`); flags override.
   // No gunshi defaults here, so config can fill them in.
   provider: { type: 'string', description: '[config] CI provider: github (default), gitlab, circleci' },
@@ -42,7 +44,7 @@ const args = {
 function runPlain(values: Record<string, any>, selectors: string[]): number {
   const root = findWorkspaceRoot();
   const config = loadConfig(root);
-  const discovered = discoverPackages(root);
+  const discovered = applyIgnore(discoverPackages(root), config.ignore);
   const repo = values.repo ?? detectRepo(root)?.slug;
 
   const resolved = resolveTargets(discovered, selectors, !!values.new, root);
@@ -62,17 +64,13 @@ function runPlain(values: Record<string, any>, selectors: string[]): number {
     console.error(pc.red(trustError));
     return 1;
   }
-  if (!dryRun && !npmWhoami()) {
+  if (!dryRun && !npmWhoami(settings.registry)) {
     console.error(pc.red('Not logged in to npm. Run `npm login` (with 2FA) and retry.'));
     return 1;
   }
-  // managing trusted publishing needs auth + (on 2FA accounts) an OTP
-  if (!dryRun && !settings.skipTrust && !trustReadable(resolved.targets[0].name, settings.registry, settings.otp)) {
-    console.error(
-      pc.red('npm needs a 2FA one-time password for trusted publishing. Pass --otp <code>, or run `fledgling` / `fledgling sync` interactively.'),
-    );
-    return 1;
-  }
+  // Trusted publishing needs 2FA. Interactively (a TTY), npm prompts for it itself —
+  // a browser approval shared across the run. Non-interactively (CI / piped) it can't
+  // prompt, so pass --otp; npm surfaces a clear error during the operation otherwise.
 
   console.log(`${dryRun ? pc.yellow('dry run') : pc.green('apply')} — ${pc.bold('fledgling')} · ${resolved.targets.length} package(s)\n`);
   const reporter: Reporter = {
@@ -102,6 +100,12 @@ const selectorsOf = (ctx: Ctx): string[] => (ctx.positionals ?? []).slice(ctx.co
 
 /** The create flow (wizard in a TTY, plan/apply otherwise). Shared by the default command and `add`. */
 async function createRun(ctx: Ctx): Promise<void> {
+  const npmErr = checkNpmVersion();
+  if (npmErr) {
+    console.error(pc.red(npmErr));
+    process.exitCode = 1;
+    return;
+  }
   const values = ctx.values;
   const selectors = selectorsOf(ctx);
   const interactive = !!process.stdout.isTTY && !values.yes && !values['dry-run'];
@@ -129,6 +133,12 @@ const syncCommand = {
   description: 'Reconcile trusted publishing on npm with your config',
   args,
   async run(ctx: Ctx) {
+    const npmErr = checkNpmVersion();
+    if (npmErr) {
+      console.error(pc.red(npmErr));
+      process.exitCode = 1;
+      return;
+    }
     const code = await runSync(ctx.values, selectorsOf(ctx));
     if (code) process.exitCode = code;
   },

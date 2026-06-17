@@ -7,6 +7,8 @@ export interface Pkg {
   name: string;
   dir: string;
   manifest: Record<string, any>;
+  /** Synthesized from a `--new` selector (a name to claim, not found in the workspace). */
+  isNew?: boolean;
 }
 
 export interface RepoInfo {
@@ -124,6 +126,9 @@ function parsePnpmWorkspace(text: string): string[] {
   const out: string[] = [];
   let inPackages = false;
   for (const line of text.split(/\r?\n/)) {
+    // flow style on one line: `packages: ['a/*', 'b/*']`
+    const flow = line.match(/^packages:\s*\[(.+)\]\s*$/);
+    if (flow) return flow[1].split(',').map(s => s.trim().replace(/^["']|["']$/g, '')).filter(Boolean);
     if (/^packages:\s*$/.test(line)) {
       inPackages = true;
       continue;

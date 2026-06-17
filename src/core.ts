@@ -1,3 +1,4 @@
+import pc from 'picocolors';
 import type { Pkg } from './workspace.js';
 import { discoverPackages, findWorkspaceRoot } from './workspace.js';
 import {
@@ -9,7 +10,7 @@ import {
   type TrustOptions,
   type TrustEntry,
 } from './npm.js';
-import type { Permission, Provider, FledglingConfig } from './config.js';
+import { loadConfig, type Permission, type Provider, type FledglingConfig } from './config.js';
 
 export interface Settings {
   dryRun: boolean;
@@ -19,6 +20,7 @@ export interface Settings {
   version: string;
   tag?: string;
   otp?: string;
+  otpSecret?: string;
   provider: Provider;
   permissions: Permission;
   registry?: string;
@@ -81,6 +83,7 @@ export function buildSettings(
     version: values['placeholder-version'] ?? '0.0.0',
     tag: values.tag,
     otp: values.otp,
+    otpSecret: values['otp-secret'] ?? process.env.FLEDGLING_OTP_SECRET,
   };
 }
 
@@ -90,6 +93,7 @@ export function toTrustOptions(s: Settings): TrustOptions {
     permissions: s.permissions,
     registry: s.registry,
     otp: s.otp,
+    otpSecret: s.otpSecret,
     dryRun: s.dryRun,
     repo: s.repo,
     workflow: s.workflow,
@@ -130,25 +134,29 @@ export function trustMatches(e: TrustEntry, s: Settings): boolean {
   return eq(entity, s.repo) && eq(e.file, s.workflow) && eq(e.environment, s.env);
 }
 
-/** Human-readable "remote → desired" list of what differs. */
+/** Colorized "current → desired" list of what differs (one entry per changed field). */
 export function describeTrustDiff(e: TrustEntry, s: Settings): string[] {
-  const f = (v: string | undefined) => v || '(none)';
+  // quote real values (so empties/whitespace are obvious), dim a bare (none)
+  const fmt = (v: string | undefined, color: (s: string) => string) =>
+    v ? color(`"${v}"`) : pc.dim('(none)');
+  const delta = (key: string, from?: string, to?: string) =>
+    `${pc.dim(key)} ${fmt(from, pc.red)} ${pc.dim('→')} ${fmt(to, pc.green)}`;
   const d: string[] = [];
-  if (e.type !== s.provider) d.push(`provider ${f(e.type)} → ${s.provider}`);
+  if (e.type !== s.provider) d.push(delta('provider', e.type, s.provider));
   if (!sameList(e.permissions, PERMS[s.permissions])) {
-    d.push(`permissions ${(e.permissions ?? []).join('+') || '(none)'} → ${s.permissions}`);
+    d.push(delta('permissions', (e.permissions ?? []).join('+'), s.permissions));
   }
   if (s.provider === 'circleci') {
-    if (!eq(e.orgId, s.orgId)) d.push(`org-id ${f(e.orgId)} → ${f(s.orgId)}`);
-    if (!eq(e.projectId, s.projectId)) d.push(`project-id ${f(e.projectId)} → ${f(s.projectId)}`);
-    if (!eq(e.pipelineDefinitionId, s.pipelineDefinitionId)) d.push(`pipeline-id ${f(e.pipelineDefinitionId)} → ${f(s.pipelineDefinitionId)}`);
-    if (!eq(e.vcsOrigin, s.vcsOrigin)) d.push(`vcs-origin ${f(e.vcsOrigin)} → ${f(s.vcsOrigin)}`);
-    if (!sameList(e.contextIds, s.contextIds)) d.push('context-ids differ');
+    if (!eq(e.orgId, s.orgId)) d.push(delta('org-id', e.orgId, s.orgId));
+    if (!eq(e.projectId, s.projectId)) d.push(delta('project-id', e.projectId, s.projectId));
+    if (!eq(e.pipelineDefinitionId, s.pipelineDefinitionId)) d.push(delta('pipeline-id', e.pipelineDefinitionId, s.pipelineDefinitionId));
+    if (!eq(e.vcsOrigin, s.vcsOrigin)) d.push(delta('vcs-origin', e.vcsOrigin, s.vcsOrigin));
+    if (!sameList(e.contextIds, s.contextIds)) d.push(`${pc.dim('context-ids')} ${pc.yellow('differ')}`);
   } else {
     const entity = s.provider === 'gitlab' ? e.project : e.repository;
-    if (!eq(entity, s.repo)) d.push(`repo ${f(entity)} → ${f(s.repo)}`);
-    if (!eq(e.file, s.workflow)) d.push(`workflow ${f(e.file)} → ${f(s.workflow)}`);
-    if (!eq(e.environment, s.env)) d.push(`environment ${f(e.environment)} → ${f(s.env)}`);
+    if (!eq(entity, s.repo)) d.push(delta('repo', entity, s.repo));
+    if (!eq(e.file, s.workflow)) d.push(delta('workflow', e.file, s.workflow));
+    if (!eq(e.environment, s.env)) d.push(delta('environment', e.environment, s.env));
   }
   return d;
 }
@@ -160,20 +168,21 @@ export type TrustView = Pick<
 
 /** The desired trusted-publishing config, formatted for display. */
 export function describeConfig(c: TrustView): string {
-  const f = (v?: string) => v ?? '(none)';
-  const lines = [`provider:    ${c.provider}`, `permissions: ${c.permissions}`];
+  const v = (val?: string) => (val ? pc.cyan(val) : pc.dim('(none)'));
+  const row = (label: string, val?: string) => `${`${label}:`.padEnd(12)} ${v(val)}`;
+  const lines = [row('provider', c.provider), row('permissions', c.permissions)];
   if (c.provider === 'circleci') {
     lines.push(
-      `org-id:      ${f(c.orgId)}`,
-      `project-id:  ${f(c.projectId)}`,
-      `pipeline-id: ${f(c.pipelineDefinitionId)}`,
-      `vcs-origin:  ${f(c.vcsOrigin)}`,
+      row('org-id', c.orgId),
+      row('project-id', c.projectId),
+      row('pipeline-id', c.pipelineDefinitionId),
+      row('vcs-origin', c.vcsOrigin),
     );
-    if (c.contextIds?.length) lines.push(`context-ids: ${c.contextIds.join(', ')}`);
+    if (c.contextIds?.length) lines.push(row('context-ids', c.contextIds.join(', ')));
   } else {
-    lines.push(`repo:        ${f(c.repo)}`, `workflow:    ${c.workflow}`, `environment: ${f(c.env)}`);
+    lines.push(row('repo', c.repo), row('workflow', c.workflow), row('environment', c.env));
   }
-  if (c.registry) lines.push(`registry:    ${c.registry}`);
+  if (c.registry) lines.push(row('registry', c.registry));
   return lines.join('\n');
 }
 
@@ -206,9 +215,17 @@ export function globToRegExp(glob: string): RegExp {
   return new RegExp(`^${body}$`);
 }
 
+/** Drop packages whose name matches an `ignore` glob (from `fledgling.ignore`). */
+export function applyIgnore(pkgs: Pkg[], ignore?: string[]): Pkg[] {
+  if (!ignore?.length) return pkgs;
+  const res = ignore.map(globToRegExp);
+  return pkgs.filter(p => !res.some(re => re.test(p.name)));
+}
+
 /** Package names in the current workspace — used for tab completion and the wizard. */
 export function workspacePackages(): Pkg[] {
-  return discoverPackages(findWorkspaceRoot());
+  const root = findWorkspaceRoot();
+  return applyIgnore(discoverPackages(root), loadConfig(root).ignore);
 }
 
 export interface ResolveResult {
@@ -228,7 +245,7 @@ export function resolveTargets(discovered: Pkg[], selectors: string[], isNew: bo
     const matches = discovered.filter(p => globToRegExp(sel).test(p.name));
     if (matches.length === 0) {
       if (isNew && !sel.includes('*') && !sel.includes('?')) {
-        matches.push({ name: sel, dir: root, manifest: { name: sel } });
+        matches.push({ name: sel, dir: root, manifest: { name: sel }, isNew: true });
       } else {
         const hint = isNew ? '' : ' (use --new to claim a brand-new name)';
         return { targets: [], error: `No package matches "${sel}".${hint}` };
@@ -243,6 +260,15 @@ export function resolveTargets(discovered: Pkg[], selectors: string[], isNew: bo
 export function processTarget(t: Pkg, s: Settings, report: Reporter): TargetResult {
   const result: TargetResult = { name: t.name, claim: 'na', trust: 'na' };
   let exists = packageExists(t.name, s.registry);
+  const existedBefore = exists; // a name we're claiming this run has no trust config yet
+
+  // A `--new` name that's already on npm can't be claimed — and we must not configure
+  // trust on it against the current repo (you may not own it). Stop with a clear note.
+  if (t.isNew && exists) {
+    report.fail(`${t.name} — already taken on npm; can't claim this name`);
+    result.claim = 'fail';
+    return result;
+  }
 
   if (!s.skipPublish) {
     if (exists) {
@@ -253,6 +279,7 @@ export function processTarget(t: Pkg, s: Settings, report: Reporter): TargetResu
         publishPlaceholder(placeholderManifest(t, s.version), {
           dryRun: s.dryRun,
           otp: s.otp,
+          otpSecret: s.otpSecret,
           tag: s.tag,
           registry: s.registry,
         });
@@ -270,8 +297,10 @@ export function processTarget(t: Pkg, s: Settings, report: Reporter): TargetResu
     if (!exists && !s.dryRun) {
       report.skip(`${t.name} — trust skipped (name not on npm yet)`);
     } else {
-      // Needs auth + OTP (ensured upstream); dry-run is best-effort.
-      const existing = listTrust(t.name, s.registry, s.otp);
+      // Only packages that already existed can have a trust config — a name we just
+      // claimed starts empty, so skip the read (which needs npm's warmed 2FA) for it.
+      // The write below relies on npm's own interactive 2FA; dry-run is best-effort.
+      const existing = existedBefore ? listTrust(t.name, s.registry, s) : [];
       if (existing.length && !s.force) {
         report.skip(`${t.name} — trust already configured (use --force to replace)`);
         result.trust = 'skip';
@@ -287,7 +316,7 @@ export function processTarget(t: Pkg, s: Settings, report: Reporter): TargetResu
         try {
           // npm allows one config per package — revoke the existing one before replacing
           if (s.force && existing.length) {
-            for (const e of existing) if (e.id) revokeTrust(t.name, e.id, s.registry, s.otp);
+            for (const e of existing) if (e.id) revokeTrust(t.name, e.id, s.registry, s);
           }
           configureTrust(t.name, toTrustOptions(s));
           result.trust = 'done';
