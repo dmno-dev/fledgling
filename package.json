@@ -52,7 +52,7 @@
   "fledgling": {
     "provider": "github",
     "workflow": "release.yml",
-    "environment": "publish2",
+    "environment": "publish",
     "permissions": "publish"
   }
 }

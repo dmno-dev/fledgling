@@ -61,6 +61,8 @@ npx fledgling --yes        # apply: claim names + configure trusted publishing
 
 Then add the matching publish step to your CI (e.g. a GitHub Actions job with `permissions: id-token: write` running `npm publish`). Your real releases now publish over OIDC — no token required.
 
+> 🐸 **Next step: [Bumpy](https://bumpy.varlock.dev)** handles exactly that publish step for you — it versions your packages, writes changelogs, and publishes over OIDC trusted publishing (no `NPM_TOKEN`). `fledgling` sets up the trust, Bumpy does the releasing — they pair perfectly. (This repo is released with it.)
+
 ## Configuration
 
 **The recommended way to configure `fledgling` is a `"fledgling"` block in your root `package.json`.** Set it once and every run reads it — CLI flags are just per-run overrides. Create it interactively:
