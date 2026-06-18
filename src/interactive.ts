@@ -1,7 +1,7 @@
 import * as p from '@clack/prompts';
 import pc from 'picocolors';
 import { findWorkspaceRoot, discoverPackages, detectRepo, type Pkg } from './workspace.js';
-import { npmWhoami, publishedNames, warmNpmAuth } from './npm.js';
+import { npmWhoami, publishedNames, warmNpmAuth, validatePackageName, isNameAvailable } from './npm.js';
 import {
   resolveTargets,
   processTarget,
@@ -49,14 +49,36 @@ export async function runWizard(values: Record<string, any>, selectors: string[]
   // --- choose targets ---
   const onlyTrust = !!values['skip-publish'];
   let targets: Pkg[];
-  if (discovered.length === 0 && selectors.length === 0) {
-    const name = await p.text({
-      message: 'No packages found here. Name one to claim:',
-      placeholder: '@scope/my-package',
-      validate: v => (v?.trim() ? undefined : 'Enter a package name'),
-    });
-    if (cancelled(name)) return cancel();
-    targets = [{ name: String(name).trim(), dir: root, manifest: { name: String(name).trim() } }];
+  // Prompt for a brand-new name when there's nothing to discover, or when the user asked
+  // for a bare `--new` (no names given). Format is validated as you type; availability is
+  // checked on submit so a taken name re-prompts instead of failing later at claim time.
+  const promptForNewName = selectors.length === 0 && (discovered.length === 0 || newClaim);
+  if (promptForNewName) {
+    const firstHere = discovered.length === 0;
+    let pkg: Pkg | undefined;
+    while (!pkg) {
+      const name = await p.text({
+        message: firstHere ? 'No package.json here — name one to claim:' : 'Name to claim:',
+        placeholder: '@scope/my-package',
+        validate: v => validatePackageName((v ?? '').trim()),
+      });
+      if (cancelled(name)) return cancel();
+      const trimmed = String(name).trim();
+      const nameSpin = hatchSpinner();
+      nameSpin.start(`Checking ${pc.cyan(trimmed)} on npm…`);
+      const available = await isNameAvailable(trimmed, registry);
+      if (available === false) {
+        nameSpin.stop(pc.red(`📦 ${pc.cyan(trimmed)} is already taken — try another. ❌`));
+        continue;
+      }
+      nameSpin.stop(
+        available === true
+          ? pc.green(`✓ ${pc.cyan(trimmed)} is available`)
+          : pc.dim(`Couldn't reach npm to check ${trimmed} — continuing (verified at claim time).`),
+      );
+      pkg = { name: trimmed, dir: root, manifest: { name: trimmed }, isNew: true };
+    }
+    targets = [pkg];
   } else {
     const resolved = resolveTargets(discovered, selectors, !!values.new, root);
     if (resolved.error) {

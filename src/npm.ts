@@ -137,6 +137,57 @@ export async function publishedNames(names: string[], registry?: string, concurr
   return found;
 }
 
+/**
+ * Validate a name against npm's package-name rules. Returns an error message to show
+ * the user, or undefined if the name is well-formed. (Format only — availability is a
+ * separate network check, see `isNameAvailable`.)
+ */
+export function validatePackageName(name: string): string | undefined {
+  if (!name) return 'Enter a package name';
+  if (name.length > 214) return 'Too long — npm names are 214 characters max';
+  if (name.trim() !== name) return 'No leading or trailing spaces';
+  if (/[A-Z]/.test(name)) return 'Must be lowercase';
+  const scoped = name.match(/^@([^/]+)\/([^/]+)$/);
+  if (name.startsWith('@') && !scoped) return 'Scoped names look like @scope/name';
+  const parts = scoped ? [scoped[1], scoped[2]] : [name];
+  for (const part of parts) {
+    if (!part) return 'Missing scope or name';
+    if (/^[._]/.test(part)) return "Can't start with a dot or underscore";
+    // npm allows url-safe chars; reject anything that would need encoding.
+    if (!/^[a-z0-9._~-]+$/.test(part)) return 'Use letters, numbers, and - . _ ~ only';
+  }
+  return undefined;
+}
+
+/** Registry base URL (no trailing slash) — the configured one, else the public npm registry. */
+function registryBase(registry?: string): string {
+  return (registry ?? 'https://registry.npmjs.org').replace(/\/+$/, '');
+}
+
+/**
+ * Is `name` free to claim on the registry? `true` = available (404), `false` = taken,
+ * `null` = couldn't tell (network/registry error — caller should let the user proceed).
+ *
+ * Uses a direct HTTP HEAD instead of `npm view` so it's fast enough to run interactively
+ * (no subprocess, ~one round-trip). The authoritative check still happens at claim time.
+ */
+export async function isNameAvailable(name: string, registry?: string, timeoutMs = 4000): Promise<boolean | null> {
+  // The registry encodes the scope slash as %2f; everything else is path-safe.
+  const url = `${registryBase(registry)}/${name.replace('/', '%2f')}`;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { method: 'HEAD', signal: ctrl.signal });
+    if (res.status === 404) return true;
+    if (res.ok) return false;
+    return null; // 4xx/5xx we don't understand → unknown
+  } catch {
+    return null; // offline, DNS failure, abort, etc.
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function withOtp(args: string[], otp?: string): string[] {
   if (otp) args.push(`--otp=${otp}`);
   return args;
