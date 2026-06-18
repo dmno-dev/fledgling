@@ -13,7 +13,7 @@
       },
       "devDependencies": {
         "@types/node": "^25.0.0",
-        "@varlock/bumpy": "^1.14.0",
+        "@varlock/bumpy": "^1.15.0",
         "tsdown": "^0.22.2",
         "typescript": "^6.0.3",
       },
@@ -96,7 +96,7 @@
 
     "@types/node": ["@types/node@25.9.3", "", { "dependencies": { "undici-types": ">=7.24.0 <7.24.7" } }, "sha512-603BddQMv3pUcr4U2dhujk83N2tTDVr/34wII2B6bJy6g+8WD6yUb11jszNs0gdi4PesVWl7ABt8nYMVpnLUcg=="],
 
-    "@varlock/bumpy": ["@varlock/bumpy@1.14.0", "", { "bin": { "bumpy": "dist/cli.mjs" } }, "sha512-nyKIfapUGURBKTmDPSvwZtuC8NRCRvN157TxDqxz+GBqTlTzV93txHGcrI/4aepTpIqoqZew3QPzIZaEOaMKJA=="],
+    "@varlock/bumpy": ["@varlock/bumpy@1.15.0", "", { "bin": { "bumpy": "dist/cli.mjs" } }, "sha512-7VLFZdyU387Lv40rOKGG/9dffwXQW+3OuCKcOwKVTLeUF2OVWTEZ23Ylz5Y4ERo44xqtY62nS6ZzqW/toABGqw=="],
 
     "ansis": ["ansis@4.3.1", "", {}, "sha512-BJ8/l4R5LRE7hW9WdSuGYrLSHi2ynxeFpDFbH0K/CgNeY/tyhk+vO6TYxXC5r5CpUhNVX310xzPsN/H9lCdfOA=="],
 
