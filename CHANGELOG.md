@@ -1,5 +1,11 @@
 # Changelog
 
+
+## 1.1.0
+<sub>2026-06-18</sub>
+
+- [#2](https://github.com/dmno-dev/fledgling/pull/2)  *(minor)* - Prompt for a new package name in the wizard.
+
 ## 1.0.0
 <sub>2026-06-17</sub>
 
