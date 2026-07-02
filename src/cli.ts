@@ -59,6 +59,15 @@ function runPlain(values: Record<string, any>, selectors: string[]): number {
 
   const dryRun = !values.yes;
   const settings = buildSettings(values, config, repo, dryRun);
+  // Trusted publishing only makes sense once a package lives in a repo/CI. A brand-new
+  // name isn't necessarily there yet — so if we can't resolve a trust config for an
+  // all-new claim, skip trust (with a note) rather than blocking the name claim. Once
+  // it's in a repo, `fledgling sync` (or a passed --repo) wires up trust.
+  const allNew = resolved.targets.every(t => t.isNew);
+  if (!settings.skipTrust && allNew && validateTrustSettings(settings)) {
+    console.log(pc.dim('No repo/CI context for a new name — skipping trusted publishing. Run `fledgling sync` once it lives in a repo.'));
+    settings.skipTrust = true;
+  }
   const trustError = validateTrustSettings(settings);
   if (trustError) {
     console.error(pc.red(trustError));
