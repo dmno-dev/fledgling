@@ -3,10 +3,10 @@ import { cli } from 'gunshi';
 import pc from 'picocolors';
 import { maybeHandleCompletion } from './completion.js';
 import { findWorkspaceRoot, discoverPackages, detectRepo } from './workspace.js';
-import { npmWhoami, checkNpmVersion } from './npm.js';
+import { npmAuthCheck, checkNpmVersion } from './npm.js';
 import { resolveTargets, processTarget, summarize, validateTrustSettings, buildSettings, applyIgnore, type Reporter } from './core.js';
 import { loadConfig } from './config.js';
-import { warnIfTwoFactorDisabled } from './ui.js';
+import { twoFactorDisabledWarning } from './ui.js';
 import { runWizard } from './interactive.js';
 import { runInit } from './init.js';
 import { runSync } from './sync.js';
@@ -65,13 +65,16 @@ function runPlain(values: Record<string, any>, selectors: string[]): number {
     console.error(pc.red(trustError));
     return 1;
   }
-  if (!dryRun && !npmWhoami(settings.registry)) {
-    console.error(pc.red('Not logged in to npm. Run `npm login` (with 2FA) and retry.'));
-    return 1;
+  // Only the apply path (`--yes`) hits npm. Require login, and warn (don't stop) on a
+  // disabled-2FA account so it gets a clear heads-up instead of a raw 403 on first claim.
+  if (!dryRun) {
+    const auth = npmAuthCheck(settings.registry);
+    if (!auth.who) {
+      console.error(pc.red('Not logged in to npm. Run `npm login` (with 2FA) and retry.'));
+      return 1;
+    }
+    if (auth.twoFactorDisabled) console.error(twoFactorDisabledWarning);
   }
-  // npm requires 2FA (or a bypass-2FA token) to publish; warn (don't stop) so a disabled
-  // account gets a clear heads-up instead of a raw 403 on the first claim.
-  if (!dryRun) warnIfTwoFactorDisabled(settings.registry, m => console.error(m));
   // Trusted publishing needs 2FA. Interactively (a TTY), npm prompts for it itself —
   // a browser approval shared across the run. Non-interactively (CI / piped) it can't
   // prompt, so pass --otp; npm surfaces a clear error during the operation otherwise.

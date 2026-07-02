@@ -99,6 +99,24 @@ export function npmTwoFactorStatus(registry?: string): 'enabled' | 'disabled' | 
   }
 }
 
+/** The result of an npm auth preflight — who we are, and whether 2FA will block publishing. */
+export interface NpmAuth {
+  /** Logged-in npm user for `registry`, or null if not logged in. */
+  who: string | null;
+  /** Logged in *and* the account has 2FA off (publishing/trust will 403). */
+  twoFactorDisabled: boolean;
+}
+
+/**
+ * One npm auth preflight, shared by every command: who am I on `registry`, and is 2FA
+ * missing? 2FA is only probed when logged in (a `profile get` while logged out is noise).
+ * Callers decide the *policy* around the result — soft-warn, or hard-stop.
+ */
+export function npmAuthCheck(registry?: string): NpmAuth {
+  const who = npmWhoami(registry);
+  return { who, twoFactorDisabled: !!who && npmTwoFactorStatus(registry) === 'disabled' };
+}
+
 /** Minimum npm fledgling needs — `npm trust` + OIDC/staged publishing landed here. */
 export const MIN_NPM = '11.15.0';
 

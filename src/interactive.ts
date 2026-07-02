@@ -1,7 +1,7 @@
 import * as p from '@clack/prompts';
 import pc from 'picocolors';
 import { findWorkspaceRoot, discoverPackages, detectRepo, type Pkg } from './workspace.js';
-import { npmWhoami, publishedNames, warmNpmAuth, validatePackageName, isNameAvailable } from './npm.js';
+import { npmAuthCheck, publishedNames, warmNpmAuth, validatePackageName, isNameAvailable } from './npm.js';
 import {
   resolveTargets,
   processTarget,
@@ -14,7 +14,7 @@ import {
   type TrustView,
 } from './core.js';
 import { loadConfig, type Permission, type Provider } from './config.js';
-import { hatchSpinner, hatchIntro, cmd, otpBoxReminder, warnIfTwoFactorDisabled, note } from './ui.js';
+import { hatchSpinner, hatchIntro, cmd, otpBoxReminder, reportNpmAuth, note } from './ui.js';
 
 const cancelled = (v: unknown): boolean => p.isCancel(v);
 
@@ -41,16 +41,12 @@ export async function runWizard(values: Record<string, any>, selectors: string[]
   }
 
   // Check login up front (per-registry) so we can flag it before any prompts. We don't
-  // hard-stop — without a login we still walk through and show a dry-run preview.
-  const who = npmWhoami(registry);
-  if (who) {
-    p.log.info(`Logged in to npm as ${pc.green(who)}`);
-    // npm requires 2FA (or a bypass-2FA token) to publish — catch a disabled account here
-    // rather than letting every claim 403. A warning, not a stop: token users read 'unknown'.
-    warnIfTwoFactorDisabled(registry, m => p.log.warn(m));
-  } else {
-    p.log.warn(pc.yellow('Not logged in to npm — run `npm login` (with 2FA) to apply. This run will be a dry run.'));
-  }
+  // hard-stop — without a login we still walk through and show a dry-run preview. A
+  // logged-in report also flags a disabled-2FA account (which would 403 at claim time).
+  const auth = npmAuthCheck(registry);
+  const who = auth.who;
+  if (who) reportNpmAuth(auth);
+  else p.log.warn(pc.yellow('Not logged in to npm — run `npm login` (with 2FA) to apply. This run will be a dry run.'));
 
   // --- choose targets ---
   const onlyTrust = !!values['skip-publish'];

@@ -1,7 +1,7 @@
 import * as p from '@clack/prompts';
 import pc from 'picocolors';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { npmTwoFactorStatus } from './npm.js';
+import type { NpmAuth } from './npm.js';
 
 const BAR_START = '┌'; // ┌  (matches clack's intro)
 
@@ -22,18 +22,20 @@ export const otpBoxReminder =
   `so it won't prompt again for every package.`;
 
 /** Shown when the logged-in npm account has 2FA off — publishing/trust will 403 without it. */
-const twoFactorDisabledWarning = pc.yellow(
+export const twoFactorDisabledWarning = pc.yellow(
   `Your npm account doesn't have 2FA enabled — npm requires it to publish/configure trust, so this will fail with a 403.\n` +
     `Enable it at ${pc.underline('https://www.npmjs.com/settings/~/profile')} (or authenticate with a granular access token that has "bypass 2FA").`,
 );
 
 /**
- * If the account's 2FA is disabled, emit the warning via `warn` (whatever logger the
- * caller uses — clack, console, …). A no-op when 2FA is on or can't be read, so callers
- * just decide *when* to check (logged in? applying?) — not what to say. See `npmTwoFactorStatus`.
+ * Report a logged-in npm session the clack way (used by the wizard and `sync`): the
+ * "logged in as…" line plus a 2FA heads-up when it's off. No-op if not logged in — the
+ * caller owns that branch, since dry-run and hard-stop paths word it differently.
  */
-export function warnIfTwoFactorDisabled(registry: string | undefined, warn: (msg: string) => void): void {
-  if (npmTwoFactorStatus(registry) === 'disabled') warn(twoFactorDisabledWarning);
+export function reportNpmAuth({ who, twoFactorDisabled }: NpmAuth): void {
+  if (!who) return;
+  p.log.info(`Logged in to npm as ${pc.green(who)}`);
+  if (twoFactorDisabled) p.log.warn(twoFactorDisabledWarning);
 }
 
 /** A spinner that hatches: 🥚 → 🐣 → 🐥. */
