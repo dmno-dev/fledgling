@@ -1,7 +1,7 @@
 import * as p from '@clack/prompts';
 import pc from 'picocolors';
 import { findWorkspaceRoot, discoverPackages, detectRepo, type Pkg } from './workspace.js';
-import { npmWhoami, npmTwoFactorStatus, listTrust, configureTrust, revokeTrust, warmNpmAuth, publishedNames } from './npm.js';
+import { npmWhoami, listTrust, configureTrust, revokeTrust, warmNpmAuth, publishedNames } from './npm.js';
 import {
   resolveTargets,
   validateTrustSettings,
@@ -13,7 +13,7 @@ import {
   applyIgnore,
 } from './core.js';
 import { loadConfig } from './config.js';
-import { hatchSpinner, hatchIntro, otpBoxReminder, note } from './ui.js';
+import { hatchSpinner, hatchIntro, otpBoxReminder, warnIfTwoFactorDisabled, note } from './ui.js';
 
 /**
  * `fledgling sync` — reconcile trusted publishing across the workspace.
@@ -38,14 +38,7 @@ export async function runSync(values: Record<string, any>, selectors: string[]):
   }
   p.log.info(`Logged in to npm as ${pc.green(who)}`);
   // Trust writes need 2FA — warn (don't stop) so a disabled account isn't surprised by a 403.
-  if (npmTwoFactorStatus(registry) === 'disabled') {
-    p.log.warn(
-      pc.yellow(
-        `Your npm account doesn't have 2FA enabled — npm requires it to update trusted publishing.\n` +
-          `Enable it at ${pc.underline('https://www.npmjs.com/settings/~/profile')} (or authenticate with a granular access token that has "bypass 2FA").`,
-      ),
-    );
-  }
+  warnIfTwoFactorDisabled(registry, m => p.log.warn(m));
 
   const discovered = applyIgnore(discoverPackages(root), config.ignore);
 

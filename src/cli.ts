@@ -3,9 +3,10 @@ import { cli } from 'gunshi';
 import pc from 'picocolors';
 import { maybeHandleCompletion } from './completion.js';
 import { findWorkspaceRoot, discoverPackages, detectRepo } from './workspace.js';
-import { npmWhoami, npmTwoFactorStatus, checkNpmVersion } from './npm.js';
+import { npmWhoami, checkNpmVersion } from './npm.js';
 import { resolveTargets, processTarget, summarize, validateTrustSettings, buildSettings, applyIgnore, type Reporter } from './core.js';
 import { loadConfig } from './config.js';
+import { warnIfTwoFactorDisabled } from './ui.js';
 import { runWizard } from './interactive.js';
 import { runInit } from './init.js';
 import { runSync } from './sync.js';
@@ -70,14 +71,7 @@ function runPlain(values: Record<string, any>, selectors: string[]): number {
   }
   // npm requires 2FA (or a bypass-2FA token) to publish; warn (don't stop) so a disabled
   // account gets a clear heads-up instead of a raw 403 on the first claim.
-  if (!dryRun && npmTwoFactorStatus(settings.registry) === 'disabled') {
-    console.error(
-      pc.yellow(
-        "Warning: your npm account doesn't have 2FA enabled — npm requires it to publish, so claims will fail with a 403.\n" +
-          'Enable it at https://www.npmjs.com/settings/~/profile (or use a granular access token with "bypass 2FA").',
-      ),
-    );
-  }
+  if (!dryRun) warnIfTwoFactorDisabled(settings.registry, m => console.error(m));
   // Trusted publishing needs 2FA. Interactively (a TTY), npm prompts for it itself —
   // a browser approval shared across the run. Non-interactively (CI / piped) it can't
   // prompt, so pass --otp; npm surfaces a clear error during the operation otherwise.
