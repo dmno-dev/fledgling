@@ -1,6 +1,7 @@
 import * as p from '@clack/prompts';
 import pc from 'picocolors';
 import { setTimeout as sleep } from 'node:timers/promises';
+import type { NpmAuth } from './npm.js';
 
 const BAR_START = '┌'; // ┌  (matches clack's intro)
 
@@ -19,6 +20,23 @@ export const note = (message: string, title?: string): void =>
 export const otpBoxReminder =
   `npm will open your browser to approve 2FA — tick ${pc.bold(`"don't ask again for 5 minutes"`)} ` +
   `so it won't prompt again for every package.`;
+
+/** Shown when the logged-in npm account has 2FA off — publishing/trust will 403 without it. */
+export const twoFactorDisabledWarning = pc.yellow(
+  `Your npm account doesn't have 2FA enabled — npm requires it to publish/configure trust, so this will fail with a 403.\n` +
+    `Enable it at ${pc.underline('https://www.npmjs.com/settings/~/profile')} (or authenticate with a granular access token that has "bypass 2FA").`,
+);
+
+/**
+ * Report a logged-in npm session the clack way (used by the wizard and `sync`): the
+ * "logged in as…" line plus a 2FA heads-up when it's off. No-op if not logged in — the
+ * caller owns that branch, since dry-run and hard-stop paths word it differently.
+ */
+export function reportNpmAuth({ who, twoFactorDisabled }: NpmAuth): void {
+  if (!who) return;
+  p.log.info(`Logged in to npm as ${pc.green(who)}`);
+  if (twoFactorDisabled) p.log.warn(twoFactorDisabledWarning);
+}
 
 /** A spinner that hatches: 🥚 → 🐣 → 🐥. */
 export const hatchSpinner = () => p.spinner({ frames: ['🥚', '🥚', '🐣', '🐣', '🐥'], delay: 180 });

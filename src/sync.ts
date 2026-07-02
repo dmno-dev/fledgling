@@ -1,7 +1,7 @@
 import * as p from '@clack/prompts';
 import pc from 'picocolors';
 import { findWorkspaceRoot, discoverPackages, detectRepo, type Pkg } from './workspace.js';
-import { npmWhoami, listTrust, configureTrust, revokeTrust, warmNpmAuth, publishedNames } from './npm.js';
+import { npmAuthCheck, listTrust, configureTrust, revokeTrust, warmNpmAuth, publishedNames } from './npm.js';
 import {
   resolveTargets,
   validateTrustSettings,
@@ -13,7 +13,7 @@ import {
   applyIgnore,
 } from './core.js';
 import { loadConfig } from './config.js';
-import { hatchSpinner, hatchIntro, otpBoxReminder, note } from './ui.js';
+import { hatchSpinner, hatchIntro, otpBoxReminder, reportNpmAuth, note } from './ui.js';
 
 /**
  * `fledgling sync` — reconcile trusted publishing across the workspace.
@@ -31,12 +31,13 @@ export async function runSync(values: Record<string, any>, selectors: string[]):
   // sync reads and writes live trust config, so it needs to be logged in — check up
   // front (per-registry) before any scanning, so we fail fast with a clear message.
   const registry = values.registry ?? config.registry;
-  const who = npmWhoami(registry);
-  if (!who) {
+  const auth = npmAuthCheck(registry);
+  if (!auth.who) {
     p.cancel(pc.red('Not logged in to npm. Run `npm login` (with 2FA) and retry.'));
     return 1;
   }
-  p.log.info(`Logged in to npm as ${pc.green(who)}`);
+  // Reports "logged in as…" and warns if 2FA is off (trust writes would 403).
+  reportNpmAuth(auth);
 
   const discovered = applyIgnore(discoverPackages(root), config.ignore);
 
