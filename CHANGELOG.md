@@ -1,6 +1,14 @@
 # Changelog
 
 
+
+## 1.1.1
+<sub>2026-07-02</sub>
+
+- [#4](https://github.com/dmno-dev/fledgling/pull/4)  *(patch)* - Warn up front when your npm account has 2FA disabled, instead of failing every claim with a raw 403.
+- [#5](https://github.com/dmno-dev/fledgling/pull/5)  *(patch)*
+  When claiming a brand-new name with `--new` and no repo can be resolved, skip trusted publishing (with a note) instead of erroring out the whole run — you can wire it up later with `fledgling sync`.
+
 ## 1.1.0
 <sub>2026-06-18</sub>
 
