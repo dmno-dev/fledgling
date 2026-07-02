@@ -1,7 +1,7 @@
 import * as p from '@clack/prompts';
 import pc from 'picocolors';
 import { findWorkspaceRoot, discoverPackages, detectRepo, type Pkg } from './workspace.js';
-import { npmWhoami, publishedNames, warmNpmAuth, validatePackageName, isNameAvailable } from './npm.js';
+import { npmWhoami, npmTwoFactorStatus, publishedNames, warmNpmAuth, validatePackageName, isNameAvailable } from './npm.js';
 import {
   resolveTargets,
   processTarget,
@@ -43,8 +43,21 @@ export async function runWizard(values: Record<string, any>, selectors: string[]
   // Check login up front (per-registry) so we can flag it before any prompts. We don't
   // hard-stop — without a login we still walk through and show a dry-run preview.
   const who = npmWhoami(registry);
-  if (who) p.log.info(`Logged in to npm as ${pc.green(who)}`);
-  else p.log.warn(pc.yellow('Not logged in to npm — run `npm login` (with 2FA) to apply. This run will be a dry run.'));
+  if (who) {
+    p.log.info(`Logged in to npm as ${pc.green(who)}`);
+    // npm requires 2FA (or a bypass-2FA token) to publish — catch a disabled account here
+    // rather than letting every claim 403. A warning, not a stop: token users read 'unknown'.
+    if (npmTwoFactorStatus(registry) === 'disabled') {
+      p.log.warn(
+        pc.yellow(
+          `Your npm account doesn't have 2FA enabled — npm requires it to publish, so claims will fail with a 403.\n` +
+            `Enable it at ${pc.underline('https://www.npmjs.com/settings/~/profile')} (or authenticate with a granular access token that has "bypass 2FA").`,
+        ),
+      );
+    }
+  } else {
+    p.log.warn(pc.yellow('Not logged in to npm — run `npm login` (with 2FA) to apply. This run will be a dry run.'));
+  }
 
   // --- choose targets ---
   const onlyTrust = !!values['skip-publish'];

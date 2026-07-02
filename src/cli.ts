@@ -3,7 +3,7 @@ import { cli } from 'gunshi';
 import pc from 'picocolors';
 import { maybeHandleCompletion } from './completion.js';
 import { findWorkspaceRoot, discoverPackages, detectRepo } from './workspace.js';
-import { npmWhoami, checkNpmVersion } from './npm.js';
+import { npmWhoami, npmTwoFactorStatus, checkNpmVersion } from './npm.js';
 import { resolveTargets, processTarget, summarize, validateTrustSettings, buildSettings, applyIgnore, type Reporter } from './core.js';
 import { loadConfig } from './config.js';
 import { runWizard } from './interactive.js';
@@ -67,6 +67,16 @@ function runPlain(values: Record<string, any>, selectors: string[]): number {
   if (!dryRun && !npmWhoami(settings.registry)) {
     console.error(pc.red('Not logged in to npm. Run `npm login` (with 2FA) and retry.'));
     return 1;
+  }
+  // npm requires 2FA (or a bypass-2FA token) to publish; warn (don't stop) so a disabled
+  // account gets a clear heads-up instead of a raw 403 on the first claim.
+  if (!dryRun && npmTwoFactorStatus(settings.registry) === 'disabled') {
+    console.error(
+      pc.yellow(
+        "Warning: your npm account doesn't have 2FA enabled — npm requires it to publish, so claims will fail with a 403.\n" +
+          'Enable it at https://www.npmjs.com/settings/~/profile (or use a granular access token with "bypass 2FA").',
+      ),
+    );
   }
   // Trusted publishing needs 2FA. Interactively (a TTY), npm prompts for it itself —
   // a browser approval shared across the run. Non-interactively (CI / piped) it can't

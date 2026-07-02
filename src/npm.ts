@@ -73,6 +73,32 @@ export function npmWhoami(registry?: string): string | null {
   }
 }
 
+/**
+ * The account's 2FA status on `registry`. npm now *requires* 2FA (or a granular access
+ * token with "bypass 2FA") to publish, and fledgling's flow leans on npm's interactive
+ * 2FA approval — so a disabled account will 403 at claim time. We surface this up front.
+ *
+ * `'disabled'` = 2FA is off (publishing will fail); `'enabled'` = fine; `'unknown'` =
+ * couldn't tell (not logged in, token auth where the profile read fails, offline, …) —
+ * callers should stay quiet then, since token users can publish with `tfa` unreadable.
+ */
+export function npmTwoFactorStatus(registry?: string): 'enabled' | 'disabled' | 'unknown' {
+  try {
+    const out = execFileSync('npm', withRegistry(['profile', 'get', '--json'], registry), {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+    // `npm profile get --json` emits the raw server profile: `tfa` is an object with a
+    // `mode` when 2FA is on, and false/null/absent when off.
+    const tfa = JSON.parse(out)?.tfa;
+    if (tfa && typeof tfa === 'object' && tfa.mode) return 'enabled';
+    if (tfa === false || tfa == null) return 'disabled';
+    return 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
+
 /** Minimum npm fledgling needs — `npm trust` + OIDC/staged publishing landed here. */
 export const MIN_NPM = '11.15.0';
 
