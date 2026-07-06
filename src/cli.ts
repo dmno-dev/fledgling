@@ -10,6 +10,7 @@ import { twoFactorDisabledWarning } from './ui.js';
 import { runWizard } from './interactive.js';
 import { runInit } from './init.js';
 import { runSync } from './sync.js';
+import { runJsr } from './jsr-cmd.js';
 
 declare const __VERSION__: string;
 const VERSION = __VERSION__;
@@ -160,6 +161,28 @@ const syncCommand = {
   },
 };
 
+// JSR's model needs none of the npm machinery (no npm CLI, no OTP, no provider config) —
+// so the `jsr` command takes its own small arg set instead of the npm-shaped one.
+const jsrArgs = {
+  yes: { type: 'boolean', short: 'y', description: 'Apply changes without prompting (default: interactive / dry run)' },
+  'dry-run': { type: 'boolean', description: 'Print a plan without prompts (non-interactive)' },
+  scope: { type: 'string', description: '[config] JSR scope for packages whose npm name has none (or to override it)' },
+  repo: { type: 'string', description: 'GitHub repo to link for OIDC publishing (default: auto-detected from git origin)' },
+  token: { type: 'string', description: 'JSR personal access token, FULL access (default: $JSR_TOKEN)' },
+  'skip-manifest': { type: 'boolean', description: "Don't scaffold missing jsr.json manifests" },
+  'skip-link': { type: 'boolean', description: "Only claim names — don't link the GitHub repo" },
+} as const;
+
+const jsrCommand = {
+  name: 'jsr',
+  description: 'Claim packages on JSR + link the repo for token-less OIDC publishing',
+  args: jsrArgs,
+  async run(ctx: Ctx) {
+    const code = await runJsr(ctx.values, selectorsOf(ctx));
+    if (code) process.exitCode = code;
+  },
+};
+
 const initCommand = {
   name: 'init',
   description: 'Write trusted-publishing config to your package.json',
@@ -181,7 +204,7 @@ try {
     name: 'fledgling',
     version: VERSION,
     description: '🐣 Create and set up packages on npm with trusted publishing',
-    subCommands: { add: addCommand, sync: syncCommand, init: initCommand },
+    subCommands: { add: addCommand, sync: syncCommand, init: initCommand, jsr: jsrCommand },
     renderHeader: null, // no auto-printed banner on every run
   });
 } catch (e) {

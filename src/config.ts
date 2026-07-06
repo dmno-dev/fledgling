@@ -6,6 +6,14 @@ export type Permission = 'publish' | 'stage' | 'both';
 
 export type Provider = 'github' | 'gitlab' | 'circleci';
 
+/** JSR settings, used by `fledgling jsr`. */
+export interface JsrConfig {
+  /** JSR scope (with or without the @) for packages whose npm name doesn't carry one. */
+  scope?: string;
+  /** Set to false to skip scaffolding missing jsr.json manifests. */
+  manifest?: boolean;
+}
+
 /** Persisted config, read from the `"fledgling"` key of the root package.json. */
 export interface FledglingConfig {
   /** Set to false to skip trusted publishing by default (just claim names). */
@@ -25,6 +33,7 @@ export interface FledglingConfig {
   pipelineDefinitionId?: string;
   vcsOrigin?: string;
   contextIds?: string[];
+  jsr?: JsrConfig;
 }
 
 export function loadConfig(root: string): FledglingConfig {
