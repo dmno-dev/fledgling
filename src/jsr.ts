@@ -24,6 +24,11 @@ export const JSR_API = 'https://api.jsr.io';
 export const JSR_COOLDOWN_MS = 1000;
 const MAX_RETRIES = 6; // 429 backoff attempts per request
 
+// JSR asks management-API clients to identify themselves ("<tool>/<version>; <url>") and
+// reserves the right to block tools that don't — so we send a real User-Agent.
+declare const __VERSION__: string;
+const USER_AGENT = `fledgling/${typeof __VERSION__ === 'string' ? __VERSION__ : '0.0.0'}; https://github.com/dmno-dev/fledgling`;
+
 /** A JSR package identity: `@scope/name`, split for API paths (which take them bare). */
 export interface JsrName {
   scope: string;
@@ -60,6 +65,7 @@ export function jsrClient(token?: string, onRetry?: (waitMs: number) => void): J
     const res = await fetch(`${JSR_API}${path}`, {
       method,
       headers: {
+        'user-agent': USER_AGENT,
         ...(token ? { authorization: `Bearer ${token}` } : {}),
         ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
       },
