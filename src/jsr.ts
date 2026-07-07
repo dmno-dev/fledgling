@@ -43,17 +43,49 @@ export interface JsrResponse {
   body: string;
 }
 
+/**
+ * Per-runtime compatibility flags, part of a package's JSR score. Every field is a
+ * tri-state: true (compatible), false (not), or null/absent (unknown — the default).
+ */
+export interface RuntimeCompat {
+  node?: boolean | null;
+  deno?: boolean | null;
+  bun?: boolean | null;
+  browser?: boolean | null;
+  workerd?: boolean | null;
+}
+
+export const RUNTIME_KEYS = ['node', 'deno', 'bun', 'browser', 'workerd'] as const;
+
+/** JSR caps a package description at 250 chars (server pattern `^.{0,250}$`). */
+export const DESCRIPTION_MAX = 250;
+
+/** The score-affecting metadata JSR stores per package (settable only via the API). */
+export interface JsrPackageMeta {
+  description?: string;
+  runtimeCompat?: RuntimeCompat;
+}
+
 export interface JsrClient {
   request(method: string, path: string, body?: unknown): Promise<JsrResponse>;
   /** The token's display name (`GET /user`), or null if it can't be read. */
   whoami(): Promise<string | null>;
   /** Can this token manage `scope`? (`GET /user/member/{scope}` — 200 = member.) */
   scopeAccess(scope: string): Promise<'ok' | 'bad-token' | 'no-access'>;
+  /** Package metadata (`GET`), or null if it doesn't exist yet (404). */
+  getPackage(n: JsrName): Promise<JsrPackageMeta | null>;
   /** Is the name claimed on JSR? (404 = free.) */
   packageExists(n: JsrName): Promise<boolean>;
   createPackage(n: JsrName): Promise<JsrResponse>;
   /** Link the GitHub repo — this is what enables token-less OIDC publishing from CI. */
   linkRepo(n: JsrName, owner: string, repo: string): Promise<JsrResponse>;
+  /**
+   * Set the package description. A standalone PATCH: JSR's updatePackage body is a
+   * `oneOf`, so description / repo link / runtimeCompat each need their own request.
+   */
+  setDescription(n: JsrName, description: string): Promise<JsrResponse>;
+  /** Set runtime-compatibility flags (its own PATCH — see `setDescription`). */
+  setRuntimeCompat(n: JsrName, rc: RuntimeCompat): Promise<JsrResponse>;
 }
 
 /**
@@ -99,6 +131,16 @@ export function jsrClient(token?: string, onRetry?: (waitMs: number) => void): J
       if (res.status === 401) return 'bad-token';
       return 'no-access';
     },
+    async getPackage(n) {
+      const res = await request('GET', `/scopes/${n.scope}/packages/${n.name}`);
+      if (res.status !== 200) return null;
+      try {
+        const pkg = JSON.parse(res.body);
+        return { description: pkg?.description ?? undefined, runtimeCompat: pkg?.runtimeCompat ?? undefined };
+      } catch {
+        return {}; // exists, but we couldn't read its metadata — treat as empty
+      }
+    },
     async packageExists(n) {
       return (await request('GET', `/scopes/${n.scope}/packages/${n.name}`)).status === 200;
     },
@@ -110,7 +152,35 @@ export function jsrClient(token?: string, onRetry?: (waitMs: number) => void): J
         githubRepository: { owner, name: repo },
       });
     },
+    setDescription(n, description) {
+      return request('PATCH', `/scopes/${n.scope}/packages/${n.name}`, { description });
+    },
+    setRuntimeCompat(n, rc) {
+      return request('PATCH', `/scopes/${n.scope}/packages/${n.name}`, { runtimeCompat: rc });
+    },
   };
+}
+
+/**
+ * Normalize a package.json description for JSR: collapse whitespace and clamp to JSR's
+ * 250-char limit. Returns the value plus whether it had to be truncated (so the caller
+ * can warn), or undefined when there's no description to set.
+ */
+export function normalizeDescription(raw?: string): { value: string; truncated: boolean } | undefined {
+  const collapsed = String(raw ?? '').replace(/\s+/g, ' ').trim();
+  if (!collapsed) return undefined;
+  return { value: collapsed.slice(0, DESCRIPTION_MAX), truncated: collapsed.length > DESCRIPTION_MAX };
+}
+
+/** Does `desired` differ from what's `current` on JSR, across the known runtime flags? */
+export function runtimeCompatDiffers(current: RuntimeCompat | undefined, desired: RuntimeCompat): boolean {
+  return RUNTIME_KEYS.some(k => (desired[k] ?? null) !== (current?.[k] ?? null));
+}
+
+/** Compact display of the runtimes marked compatible, e.g. `node+deno+bun`. */
+export function describeRuntimeCompat(rc: RuntimeCompat): string {
+  const on = RUNTIME_KEYS.filter(k => rc[k]);
+  return on.length ? on.join('+') : '(none)';
 }
 
 /**

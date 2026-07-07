@@ -248,6 +248,7 @@ Use it after changing your `fledgling` config, or to set up trust on packages th
 1. **Scaffold** — create a minimal `jsr.json` (name, version, a source `exports` entry) from each `package.json` where missing. An existing `jsr.json`/`deno.json` is authoritative and never rewritten.
 2. **Claim** — create each missing package on jsr.io via the JSR management API.
 3. **Link** — link your GitHub repo to each package, which is JSR's whole trusted-publishing setup: any workflow in the linked repo can then publish **token-lessly via OIDC** (`npx jsr publish` with `permissions: id-token: write` — no `JSR_TOKEN` secret in CI).
+4. **Sync score metadata** — reconcile each package's **description** (from `package.json`) and **runtime compatibility** (from config) to jsr.io. [JSR scores packages](https://jsr.io/docs/scoring) partly on these, and — unlike npm — they live *only* on jsr.io (the `jsr.json` manifest has no `description` field), so they can't ride along at publish time. fledgling reconciles them here, where it already holds the token; only what's changed is pushed.
 
 ```sh
 npx fledgling jsr                    # plan (interactive confirm in a terminal)
@@ -269,11 +270,17 @@ JSR names always have a scope. Packages whose npm name already has one (`@scope/
   "fledgling": {
     "jsr": {
       "scope": "myscope",     // JSR scope for unscoped npm names (or override with --scope)
-      "manifest": true        // set false to never scaffold jsr.json
+      "manifest": true,       // set false to never scaffold jsr.json
+      "metadata": true,       // set false to never sync description / runtime compat
+      "runtimeCompat": {      // default runtime-compatibility flags (part of the JSR score)
+        "node": true, "deno": true, "bun": true, "browser": true, "workerd": true
+      }
     }
   }
 }
 ```
+
+The **description** is taken automatically from each package's `package.json` (collapsed to a single line and clamped to JSR's 250-char limit). **`runtimeCompat`** is deliberately *not* inferred — set it explicitly, either as the `fledgling.jsr.runtimeCompat` default above or per-package in that package's own `package.json` (a package's own value wins). Only runtimes you mark are changed; re-running reconciles drift, so edit `package.json` and re-run to update jsr.io.
 
 ### Flags
 
@@ -286,6 +293,7 @@ JSR names always have a scope. Packages whose npm name already has one (`@scope/
 | `--token <token>` | JSR access token (prefer `$JSR_TOKEN` over the flag) |
 | `--skip-manifest` | Don't scaffold missing `jsr.json` manifests |
 | `--skip-link` | Only claim names — don't link the repo |
+| `--skip-metadata` | Don't sync score metadata (description / runtime compat) |
 
 ### Good to know
 

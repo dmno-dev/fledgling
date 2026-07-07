@@ -11,8 +11,13 @@ import {
   ensureJsrManifest,
   isWeeklyLimit,
   jsrErrorReason,
+  normalizeDescription,
+  runtimeCompatDiffers,
+  describeRuntimeCompat,
   JSR_COOLDOWN_MS,
   type JsrName,
+  type JsrPackageMeta,
+  type RuntimeCompat,
 } from './jsr.js';
 
 interface Item {
@@ -20,6 +25,11 @@ interface Item {
   jsr: JsrName;
   exists?: boolean;
   needsManifest?: boolean;
+  current?: JsrPackageMeta;
+  /** A description to push (present only when it differs from what's on JSR). */
+  descDrift?: string;
+  /** Runtime-compat flags to push (present only when they differ from JSR). */
+  rcDrift?: RuntimeCompat;
 }
 
 /**
@@ -101,10 +111,13 @@ export async function runJsr(values: Record<string, any>, selectors: string[]): 
     );
   }
 
-  // --- what's already claimed? (public reads — works for dry runs too) ---
+  // --- what's already claimed, and what metadata does it carry? (public reads) ---
   const existsSpin = hatchSpinner();
   existsSpin.start('Checking which packages exist on JSR…');
-  for (const it of items) it.exists = await client.packageExists(it.jsr);
+  for (const it of items) {
+    it.current = (await client.getPackage(it.jsr)) ?? undefined;
+    it.exists = it.current !== undefined;
+  }
   const toClaim = items.filter(it => !it.exists);
   existsSpin.stop(
     toClaim.length === 0
@@ -118,7 +131,26 @@ export async function runJsr(values: Record<string, any>, selectors: string[]): 
   }
   const manifestCount = items.filter(it => it.needsManifest).length;
 
-  if (!toClaim.length && skipLink && !manifestCount) {
+  // --- metadata drift (description from package.json, runtimeCompat from config) ---
+  // JSR scores packages on this metadata, and it lives only on jsr.io — the jsr.json
+  // manifest has no description field, so it can't ride along at publish time. We
+  // reconcile it here (the tool already holds the full-access token). A newly-claimed
+  // package starts blank, so its whole desired metadata reads as drift.
+  const skipMetadata = !!values['skip-metadata'] || config.jsr?.metadata === false;
+  if (!skipMetadata) {
+    for (const it of items) {
+      const desc = normalizeDescription(it.pkg.manifest.description);
+      if (desc) {
+        if (desc.truncated) p.log.warn(pc.yellow(`${it.jsr.full} — description exceeds 250 chars; truncating for JSR.`));
+        if (desc.value !== (it.current?.description ?? '')) it.descDrift = desc.value;
+      }
+      const desiredRc: RuntimeCompat | undefined = it.pkg.manifest.fledgling?.jsr?.runtimeCompat ?? config.jsr?.runtimeCompat;
+      if (desiredRc && runtimeCompatDiffers(it.current?.runtimeCompat, desiredRc)) it.rcDrift = desiredRc;
+    }
+  }
+  const metaCount = items.filter(it => it.descDrift || it.rcDrift).length;
+
+  if (!toClaim.length && skipLink && !manifestCount && !metaCount) {
     p.outro(pc.green('Nothing to do — everything is already on JSR. 🐣'));
     return 0;
   }
@@ -130,6 +162,7 @@ export async function runJsr(values: Record<string, any>, selectors: string[]): 
       manifestCount ? pc.green(`• scaffold ${manifestCount} missing jsr.json manifest(s)`) : '',
       toClaim.length ? pc.green(`• claim ${toClaim.length} unclaimed name(s) on jsr.io`) : '',
       skipLink ? pc.dim('• repo linking skipped') : pc.green(`• link ${repoSlug} for token-less OIDC publishing`),
+      metaCount ? pc.green(`• sync score metadata (description / runtime compat) on ${metaCount} package(s)`) : '',
     ]
       .filter(Boolean)
       .join('\n'),
@@ -157,6 +190,8 @@ export async function runJsr(values: Record<string, any>, selectors: string[]): 
         it.needsManifest ? 'scaffold jsr.json' : '',
         it.exists ? '' : 'claim',
         skipLink ? '' : 'link repo',
+        it.descDrift ? 'set description' : '',
+        it.rcDrift ? `set runtimes (${describeRuntimeCompat(it.rcDrift)})` : '',
       ].filter(Boolean);
       if (actions.length) p.log.message(`${pc.dim('would')} ${actions.join(' + ')}  ${pc.cyan(it.jsr.full)}`);
       else p.log.message(pc.dim(`nothing to do  ${it.jsr.full}`));
@@ -180,9 +215,10 @@ export async function runJsr(values: Record<string, any>, selectors: string[]): 
     }
   }
 
-  // --- apply: scaffold, claim, link — stopping cleanly at JSR's weekly quota ---
+  // --- apply: scaffold, claim, link, metadata — stopping cleanly at JSR's weekly quota ---
   let claimed = 0;
   let linked = 0;
+  let metaSynced = 0;
   const failures: string[] = [];
   let blockedFrom = -1;
   for (let i = 0; i < items.length; i++) {
@@ -213,7 +249,26 @@ export async function runJsr(values: Record<string, any>, selectors: string[]): 
         linked++;
         didLink = true;
       }
-      const did = [didClaim && 'claimed', didLink && (didClaim ? 'linked' : 're-linked'), it.needsManifest && 'jsr.json created']
+      // Metadata is a separate PATCH per field (JSR's updatePackage body is a oneOf).
+      // The package exists by now (just claimed or pre-existing), so these can't 404.
+      const metaBits: string[] = [];
+      if (it.descDrift !== undefined) {
+        const r = await client.setDescription(it.jsr, it.descDrift);
+        if (!r.ok) throw new Error(`set description — ${jsrErrorReason(r)}`);
+        metaBits.push('description');
+      }
+      if (it.rcDrift) {
+        const r = await client.setRuntimeCompat(it.jsr, it.rcDrift);
+        if (!r.ok) throw new Error(`set runtimes — ${jsrErrorReason(r)}`);
+        metaBits.push(`runtimes ${describeRuntimeCompat(it.rcDrift)}`);
+      }
+      if (metaBits.length) metaSynced++;
+      const did = [
+        didClaim && 'claimed',
+        didLink && (didClaim ? 'linked' : 're-linked'),
+        it.needsManifest && 'jsr.json created',
+        ...metaBits,
+      ]
         .filter(Boolean)
         .join(' + ');
       p.log.success(`${it.jsr.full} — ${did || 'already set up'}`);
@@ -240,12 +295,13 @@ export async function runJsr(values: Record<string, any>, selectors: string[]): 
       `CI can now publish token-lessly: a workflow in ${pc.dim(repoSlug!)} with ${pc.bold('permissions: id-token: write')} running ${cmd('npx jsr publish')}.`,
     );
   }
+  const tally = `claimed ${claimed}, linked ${linked}, metadata ${metaSynced}`;
   p.outro(
     failures.length
-      ? pc.red(`Done with ${failures.length} failure(s) — claimed ${claimed}, linked ${linked}.`)
+      ? pc.red(`Done with ${failures.length} failure(s) — ${tally}.`)
       : blocked.length
-        ? pc.yellow(`Claimed ${claimed}, linked ${linked} — ${blocked.length} blocked by the weekly quota.`)
-        : pc.green(`Done — claimed ${claimed}, linked ${linked}. 🐣`),
+        ? pc.yellow(`${tally} — ${blocked.length} blocked by the weekly quota.`)
+        : pc.green(`Done — ${tally}. 🐣`),
   );
   return failures.length || blocked.length ? 1 : 0;
 }

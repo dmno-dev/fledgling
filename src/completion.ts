@@ -58,6 +58,7 @@ const JSR_FLAGS: [string, string][] = [
   ['--token', 'JSR personal access token (full access)'],
   ['--skip-manifest', "don't scaffold missing jsr.json manifests"],
   ['--skip-link', "only claim names — don't link the repo"],
+  ['--skip-metadata', "don't sync description / runtime compat to JSR"],
 ];
 
 function defineCompletions(): void {

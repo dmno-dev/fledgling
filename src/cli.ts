@@ -171,6 +171,7 @@ const jsrArgs = {
   token: { type: 'string', description: 'JSR personal access token, FULL access (default: $JSR_TOKEN)' },
   'skip-manifest': { type: 'boolean', description: "Don't scaffold missing jsr.json manifests" },
   'skip-link': { type: 'boolean', description: "Only claim names — don't link the GitHub repo" },
+  'skip-metadata': { type: 'boolean', description: "Don't sync score metadata (description / runtime compat) to JSR" },
 } as const;
 
 const jsrCommand = {

@@ -1,5 +1,6 @@
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import type { RuntimeCompat } from './jsr.js';
 
 /** npm trusted-publisher permissions to grant. */
 export type Permission = 'publish' | 'stage' | 'both';
@@ -12,6 +13,13 @@ export interface JsrConfig {
   scope?: string;
   /** Set to false to skip scaffolding missing jsr.json manifests. */
   manifest?: boolean;
+  /** Set to false to skip syncing score metadata (description / runtime compat) to JSR. */
+  metadata?: boolean;
+  /**
+   * Default runtime-compatibility flags to publish to JSR (part of the package score).
+   * A package's own `fledgling.jsr.runtimeCompat` in its package.json overrides this.
+   */
+  runtimeCompat?: RuntimeCompat;
 }
 
 /** Persisted config, read from the `"fledgling"` key of the root package.json. */
