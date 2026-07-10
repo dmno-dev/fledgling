@@ -1,11 +1,11 @@
 import * as p from '@clack/prompts';
 import pc from 'picocolors';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { findWorkspaceRoot, discoverPackages, detectRepo, type Pkg } from './workspace.js';
-import { resolveTargets, applyIgnore } from './core.js';
-import { loadConfig } from './config.js';
-import { hatchSpinner, hatchIntro, cmd, note } from './ui.js';
-import { selectorsOf, type Ctx } from './args.js';
+import { findWorkspaceRoot, discoverPackages, detectRepo, type Pkg } from '../workspace.js';
+import { resolveTargets, applyIgnore } from '../core.js';
+import { loadConfig } from '../config.js';
+import { hatchSpinner, hatchIntro, cmd, note } from '../ui.js';
+import { selectorsOf, type Ctx } from '../args.js';
 import {
   jsrClient,
   resolveJsrName,
@@ -19,10 +19,10 @@ import {
   type JsrName,
   type JsrPackageMeta,
   type RuntimeCompat,
-} from './jsr.js';
+} from '../jsr.js';
 
-/** `fledgling jsr`'s own flags — JSR needs none of the npm-shaped `args` in cli.ts
- * (no npm CLI, no OTP, no provider/workflow/environment config). */
+/** `fledgling jsr`'s own flags — JSR needs none of the npm-shaped `args` (no npm
+ * CLI, no OTP, no provider/workflow/environment config). */
 export const jsrArgs = {
   yes: { type: 'boolean', short: 'y', description: 'Apply changes without prompting (default: interactive / dry run)' },
   'dry-run': { type: 'boolean', description: 'Print a plan without prompts (non-interactive)' },

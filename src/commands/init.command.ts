@@ -1,8 +1,8 @@
 import * as p from '@clack/prompts';
 import pc from 'picocolors';
-import { findWorkspaceRoot, detectRepo } from './workspace.js';
-import { loadConfig, writeConfig, type FledglingConfig, type Permission, type Provider } from './config.js';
-import { hatchIntro, note } from './ui.js';
+import { findWorkspaceRoot, detectRepo } from '../workspace.js';
+import { loadConfig, writeConfig, type FledglingConfig, type Permission, type Provider } from '../config.js';
+import { hatchIntro, note } from '../ui.js';
 
 const CANCEL = Symbol('cancel');
 /** Prompt for required text; returns the trimmed value or CANCEL. */

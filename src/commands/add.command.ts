@@ -1,11 +1,11 @@
 import pc from 'picocolors';
-import { findWorkspaceRoot, discoverPackages, detectRepo } from './workspace.js';
-import { npmAuthCheck, checkNpmVersion } from './npm.js';
-import { resolveTargets, processTarget, summarize, validateTrustSettings, buildSettings, applyIgnore, type Reporter } from './core.js';
-import { loadConfig } from './config.js';
-import { twoFactorDisabledWarning } from './ui.js';
-import { runWizard } from './interactive.js';
-import { npmArgs, selectorsOf, type Ctx } from './args.js';
+import { findWorkspaceRoot, discoverPackages, detectRepo } from '../workspace.js';
+import { npmAuthCheck, checkNpmVersion } from '../npm.js';
+import { resolveTargets, processTarget, summarize, validateTrustSettings, buildSettings, applyIgnore, type Reporter } from '../core.js';
+import { loadConfig } from '../config.js';
+import { twoFactorDisabledWarning } from '../ui.js';
+import { runWizard } from '../interactive.js';
+import { npmArgs, selectorsOf, type Ctx } from '../args.js';
 
 /** Non-interactive path: a plan by default, applies with --yes. */
 function runPlain(values: Record<string, any>, selectors: string[]): number {

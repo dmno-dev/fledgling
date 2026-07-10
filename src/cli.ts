@@ -2,10 +2,10 @@
 import { cli } from 'gunshi';
 import pc from 'picocolors';
 import { maybeHandleCompletion } from './completion.js';
-import { entryCommand, addCommand } from './add.js';
-import { syncCommand } from './sync.js';
-import { initCommand } from './init.js';
-import { jsrCommand } from './jsr-cmd.js';
+import { entryCommand, addCommand } from './commands/add.command.js';
+import { syncCommand } from './commands/sync.command.js';
+import { initCommand } from './commands/init.command.js';
+import { jsrCommand } from './commands/jsr.command.js';
 
 declare const __VERSION__: string;
 const VERSION = __VERSION__;
