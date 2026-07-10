@@ -2,196 +2,13 @@
 import { cli } from 'gunshi';
 import pc from 'picocolors';
 import { maybeHandleCompletion } from './completion.js';
-import { findWorkspaceRoot, discoverPackages, detectRepo } from './workspace.js';
-import { npmAuthCheck, checkNpmVersion } from './npm.js';
-import { resolveTargets, processTarget, summarize, validateTrustSettings, buildSettings, applyIgnore, type Reporter } from './core.js';
-import { loadConfig } from './config.js';
-import { twoFactorDisabledWarning } from './ui.js';
-import { runWizard } from './interactive.js';
-import { runInit } from './init.js';
-import { runSync } from './sync.js';
-import { runJsr } from './jsr-cmd.js';
+import { entryCommand, addCommand } from './add.js';
+import { syncCommand } from './sync.js';
+import { initCommand } from './init.js';
+import { jsrCommand } from './jsr-cmd.js';
 
 declare const __VERSION__: string;
 const VERSION = __VERSION__;
-
-const args = {
-  // run options (per invocation)
-  yes: { type: 'boolean', short: 'y', description: 'Apply changes without prompting (default: interactive / dry run)' },
-  'dry-run': { type: 'boolean', description: 'Print a plan without prompts (non-interactive)' },
-  new: { type: 'boolean', description: 'Treat unmatched names as brand-new packages to claim' },
-  'skip-publish': { type: 'boolean', description: 'Only set up trusted publishing' },
-  'skip-trust': { type: 'boolean', description: 'Only claim names' },
-  force: { type: 'boolean', description: 'Replace an existing trusted publisher (revoke + re-create)' },
-  'placeholder-version': { type: 'string', default: '0.0.0', description: 'Placeholder version to publish' },
-  tag: { type: 'string', description: 'dist-tag for placeholders' },
-  otp: { type: 'string', description: 'npm 2FA one-time password (used for every npm call this run)' },
-  'otp-secret': { type: 'string', description: 'TOTP secret to generate 2FA codes from (use $FLEDGLING_OTP_SECRET to avoid shell history)' },
-  // config — best set once in package.json "fledgling" (run `fledgling init`); flags override.
-  // No gunshi defaults here, so config can fill them in.
-  provider: { type: 'string', description: '[config] CI provider: github (default), gitlab, circleci' },
-  registry: { type: 'string', description: '[config] npm registry URL (default: your npm config)' },
-  permissions: { type: 'string', description: '[config] permissions to grant: publish (default), stage, both' },
-  repo: { type: 'string', description: '[config][github/gitlab] repo (default: auto-detected from git origin)' },
-  workflow: { type: 'string', description: '[config][github/gitlab] publishing workflow filename (default: release.yml)' },
-  env: { type: 'string', description: '[config][github/gitlab] CI environment (default: none)' },
-  'org-id': { type: 'string', description: '[config][circleci] organization UUID' },
-  'project-id': { type: 'string', description: '[config][circleci] project UUID' },
-  'pipeline-definition-id': { type: 'string', description: '[config][circleci] pipeline definition UUID' },
-  'vcs-origin': { type: 'string', description: '[config][circleci] VCS origin, e.g. github/owner/repo' },
-  'context-id': { type: 'string', multiple: true, description: '[config][circleci] context UUID (repeatable)' },
-} as const;
-
-/** Non-interactive path: a plan by default, applies with --yes. */
-function runPlain(values: Record<string, any>, selectors: string[]): number {
-  const root = findWorkspaceRoot();
-  const config = loadConfig(root);
-  const discovered = applyIgnore(discoverPackages(root), config.ignore);
-  const repo = values.repo ?? detectRepo(root)?.slug;
-
-  const resolved = resolveTargets(discovered, selectors, !!values.new, root);
-  if (resolved.error) {
-    console.error(pc.red(resolved.error));
-    return 1;
-  }
-  if (resolved.targets.length === 0) {
-    console.error(pc.red('No public packages found in this workspace.'));
-    return 1;
-  }
-
-  const dryRun = !values.yes;
-  const settings = buildSettings(values, config, repo, dryRun);
-  // Trusted publishing only makes sense once a package lives in a repo/CI. A brand-new
-  // name isn't necessarily there yet — so if we can't resolve a trust config for an
-  // all-new claim, skip trust (with a note) rather than blocking the name claim. Once
-  // it's in a repo, `fledgling sync` (or a passed --repo) wires up trust.
-  const allNew = resolved.targets.every(t => t.isNew);
-  if (!settings.skipTrust && allNew && validateTrustSettings(settings)) {
-    console.log(pc.dim('No repo/CI context for a new name — skipping trusted publishing. Run `fledgling sync` once it lives in a repo.'));
-    settings.skipTrust = true;
-  }
-  const trustError = validateTrustSettings(settings);
-  if (trustError) {
-    console.error(pc.red(trustError));
-    return 1;
-  }
-  // Only the apply path (`--yes`) hits npm. Require login, and warn (don't stop) on a
-  // disabled-2FA account so it gets a clear heads-up instead of a raw 403 on first claim.
-  if (!dryRun) {
-    const auth = npmAuthCheck(settings.registry);
-    if (!auth.who) {
-      console.error(pc.red('Not logged in to npm. Run `npm login` (with 2FA) and retry.'));
-      return 1;
-    }
-    if (auth.twoFactorDisabled) console.error(twoFactorDisabledWarning);
-  }
-  // Trusted publishing needs 2FA. Interactively (a TTY), npm prompts for it itself —
-  // a browser approval shared across the run. Non-interactively (CI / piped) it can't
-  // prompt, so pass --otp; npm surfaces a clear error during the operation otherwise.
-
-  console.log(`${dryRun ? pc.yellow('dry run') : pc.green('apply')} — ${pc.bold('fledgling')} · ${resolved.targets.length} package(s)\n`);
-  const reporter: Reporter = {
-    step: m => console.log('  ' + pc.green('✓') + ' ' + m),
-    skip: m => console.log('  ' + pc.dim('· ' + m)),
-    fail: m => console.error('  ' + pc.red('✗') + ' ' + m),
-  };
-  const sum = summarize(resolved.targets.map(t => processTarget(t, settings, reporter)));
-
-  console.log(
-    `\n${dryRun ? pc.yellow('dry run complete') : pc.green('done')} — ` +
-      `claimed ${sum.claimed} (skipped ${sum.claimSkipped}), trusted ${sum.trusted} (skipped ${sum.trustSkipped})` +
-      (sum.failed ? pc.red(`, failed ${sum.failed}`) : ''),
-  );
-  if (dryRun) console.log(pc.dim('Re-run with --yes to apply (needs npm login + 2FA).'));
-  return sum.failed > 0 ? 1 : 0;
-}
-
-/**
- * gunshi keeps the matched subcommand name in `positionals` (e.g. `add foo` →
- * `['add','foo']` with `commandPath: ['add']`), so drop the command path to get
- * the real package selectors. The default command has an empty path, so this is a
- * no-op there.
- */
-type Ctx = { values: Record<string, any>; positionals?: string[]; commandPath?: string[] };
-const selectorsOf = (ctx: Ctx): string[] => (ctx.positionals ?? []).slice(ctx.commandPath?.length ?? 0);
-
-/** The create flow (wizard in a TTY, plan/apply otherwise). Shared by the default command and `add`. */
-async function createRun(ctx: Ctx): Promise<void> {
-  const npmErr = checkNpmVersion();
-  if (npmErr) {
-    console.error(pc.red(npmErr));
-    process.exitCode = 1;
-    return;
-  }
-  const values = ctx.values;
-  const selectors = selectorsOf(ctx);
-  const interactive = !!process.stdout.isTTY && !values.yes && !values['dry-run'];
-  const code = interactive ? await runWizard(values, selectors) : runPlain(values, selectors);
-  if (code) process.exitCode = code;
-}
-
-// Default command (`fledgling`, no subcommand) → the interactive wizard.
-const entry = {
-  name: 'fledgling',
-  description: 'Claim package names and set up trusted publishing',
-  args,
-  run: createRun,
-};
-
-const addCommand = {
-  name: 'add',
-  description: 'Claim names + set up trusted publishing for the given packages',
-  args,
-  run: createRun,
-};
-
-const syncCommand = {
-  name: 'sync',
-  description: 'Reconcile trusted publishing on npm with your config',
-  args,
-  async run(ctx: Ctx) {
-    const npmErr = checkNpmVersion();
-    if (npmErr) {
-      console.error(pc.red(npmErr));
-      process.exitCode = 1;
-      return;
-    }
-    const code = await runSync(ctx.values, selectorsOf(ctx));
-    if (code) process.exitCode = code;
-  },
-};
-
-// JSR's model needs none of the npm machinery (no npm CLI, no OTP, no provider config) —
-// so the `jsr` command takes its own small arg set instead of the npm-shaped one.
-const jsrArgs = {
-  yes: { type: 'boolean', short: 'y', description: 'Apply changes without prompting (default: interactive / dry run)' },
-  'dry-run': { type: 'boolean', description: 'Print a plan without prompts (non-interactive)' },
-  scope: { type: 'string', description: '[config] JSR scope for packages whose npm name has none (or to override it)' },
-  repo: { type: 'string', description: 'GitHub repo to link for OIDC publishing (default: auto-detected from git origin)' },
-  token: { type: 'string', description: 'JSR personal access token, FULL access (default: $JSR_TOKEN)' },
-  'skip-manifest': { type: 'boolean', description: "Don't scaffold missing jsr.json manifests" },
-  'skip-link': { type: 'boolean', description: "Only claim names — don't link the GitHub repo" },
-  'skip-metadata': { type: 'boolean', description: "Don't sync score metadata (description / runtime compat) to JSR" },
-} as const;
-
-const jsrCommand = {
-  name: 'jsr',
-  description: 'Claim packages on JSR + link the repo for token-less OIDC publishing',
-  args: jsrArgs,
-  async run(ctx: Ctx) {
-    const code = await runJsr(ctx.values, selectorsOf(ctx));
-    if (code) process.exitCode = code;
-  },
-};
-
-const initCommand = {
-  name: 'init',
-  description: 'Write trusted-publishing config to your package.json',
-  async run() {
-    const code = await runInit();
-    if (code) process.exitCode = code;
-  },
-};
 
 const rawArgv = process.argv.slice(2);
 
@@ -201,7 +18,7 @@ if (maybeHandleCompletion(rawArgv)) {
 }
 
 try {
-  await cli(rawArgv, entry, {
+  await cli(rawArgv, entryCommand, {
     name: 'fledgling',
     version: VERSION,
     description: '🐣 Create and set up packages on npm with trusted publishing',

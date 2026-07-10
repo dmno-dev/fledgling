@@ -88,3 +88,12 @@ function cancel(): number {
   p.cancel('Cancelled.');
   return 1;
 }
+
+export const initCommand = {
+  name: 'init',
+  description: 'Write trusted-publishing config to your package.json',
+  async run() {
+    const code = await runInit();
+    if (code) process.exitCode = code;
+  },
+};

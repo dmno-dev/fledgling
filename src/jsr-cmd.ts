@@ -5,6 +5,7 @@ import { findWorkspaceRoot, discoverPackages, detectRepo, type Pkg } from './wor
 import { resolveTargets, applyIgnore } from './core.js';
 import { loadConfig } from './config.js';
 import { hatchSpinner, hatchIntro, cmd, note } from './ui.js';
+import { selectorsOf, type Ctx } from './args.js';
 import {
   jsrClient,
   resolveJsrName,
@@ -19,6 +20,19 @@ import {
   type JsrPackageMeta,
   type RuntimeCompat,
 } from './jsr.js';
+
+/** `fledgling jsr`'s own flags — JSR needs none of the npm-shaped `args` in cli.ts
+ * (no npm CLI, no OTP, no provider/workflow/environment config). */
+export const jsrArgs = {
+  yes: { type: 'boolean', short: 'y', description: 'Apply changes without prompting (default: interactive / dry run)' },
+  'dry-run': { type: 'boolean', description: 'Print a plan without prompts (non-interactive)' },
+  scope: { type: 'string', description: '[config] JSR scope for packages whose npm name has none (or to override it)' },
+  repo: { type: 'string', description: 'GitHub repo to link for OIDC publishing (default: auto-detected from git origin)' },
+  token: { type: 'string', description: 'JSR personal access token, FULL access (default: $JSR_TOKEN)' },
+  'skip-manifest': { type: 'boolean', description: "Don't scaffold missing jsr.json manifests" },
+  'skip-link': { type: 'boolean', description: "Only claim names — don't link the GitHub repo" },
+  'skip-metadata': { type: 'boolean', description: "Don't sync score metadata (description / runtime compat) to JSR" },
+} as const;
 
 interface Item {
   pkg: Pkg;
@@ -305,3 +319,13 @@ export async function runJsr(values: Record<string, any>, selectors: string[]): 
   );
   return failures.length || blocked.length ? 1 : 0;
 }
+
+export const jsrCommand = {
+  name: 'jsr',
+  description: 'Claim packages on JSR + link the repo for token-less OIDC publishing',
+  args: jsrArgs,
+  async run(ctx: Ctx) {
+    const code = await runJsr(ctx.values, selectorsOf(ctx));
+    if (code) process.exitCode = code;
+  },
+};
