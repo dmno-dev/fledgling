@@ -1,8 +1,8 @@
 import * as p from '@clack/prompts';
 import pc from 'picocolors';
-import { findWorkspaceRoot, detectRepo } from './workspace.js';
-import { loadConfig, writeConfig, type FledglingConfig, type Permission, type Provider } from './config.js';
-import { hatchIntro, note } from './ui.js';
+import { findWorkspaceRoot, detectRepo } from '../workspace.js';
+import { loadConfig, writeConfig, type FledglingConfig, type Permission, type Provider } from '../config.js';
+import { hatchIntro, note } from '../ui.js';
 
 const CANCEL = Symbol('cancel');
 /** Prompt for required text; returns the trimmed value or CANCEL. */
@@ -88,3 +88,12 @@ function cancel(): number {
   p.cancel('Cancelled.');
   return 1;
 }
+
+export const initCommand = {
+  name: 'init',
+  description: 'Write trusted-publishing config to your package.json',
+  async run() {
+    const code = await runInit();
+    if (code) process.exitCode = code;
+  },
+};

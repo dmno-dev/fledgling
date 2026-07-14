@@ -50,10 +50,30 @@ function withPackageArgsAndFlags(cmd: Cmd): void {
   for (const [flag, desc] of FLAGS) cmd.option(flag, desc);
 }
 
+const JSR_FLAGS: [string, string][] = [
+  ['--yes', 'apply changes without prompting'],
+  ['--dry-run', 'print a plan without prompting'],
+  ['--scope', 'JSR scope for unscoped packages'],
+  ['--repo', 'GitHub repo to link (owner/repo)'],
+  ['--token', 'JSR personal access token (full access)'],
+  ['--skip-manifest', "don't scaffold missing jsr.json manifests"],
+  ['--skip-link', "only claim names — don't link the repo"],
+  ['--skip-metadata', "don't sync description / runtime compat to JSR"],
+];
+
 function defineCompletions(): void {
   // subcommands: `add` / `sync` take package selectors + flags, `init` takes nothing
   withPackageArgsAndFlags(t.command('add', 'claim names + set up trusted publishing') as unknown as Cmd);
   withPackageArgsAndFlags(t.command('sync', 'reconcile trusted publishing with your config') as unknown as Cmd);
+  const jsr = t.command('jsr', 'claim packages on JSR + link the repo for OIDC') as unknown as Cmd;
+  jsr.argument(
+    'packages',
+    complete => {
+      for (const p of workspacePackages()) complete(p.name, 'package');
+    },
+    true,
+  );
+  for (const [flag, desc] of JSR_FLAGS) jsr.option(flag, desc);
   t.command('init', 'write trusted-publishing config to package.json');
 
   // bare `fledgling …` (default command) also accepts selectors + flags

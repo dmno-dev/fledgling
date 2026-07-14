@@ -1,10 +1,26 @@
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import type { RuntimeCompat } from './jsr.js';
 
 /** npm trusted-publisher permissions to grant. */
 export type Permission = 'publish' | 'stage' | 'both';
 
 export type Provider = 'github' | 'gitlab' | 'circleci';
+
+/** JSR settings, used by `fledgling jsr`. */
+export interface JsrConfig {
+  /** JSR scope (with or without the @) for packages whose npm name doesn't carry one. */
+  scope?: string;
+  /** Set to false to skip scaffolding missing jsr.json manifests. */
+  manifest?: boolean;
+  /** Set to false to skip syncing score metadata (description / runtime compat) to JSR. */
+  metadata?: boolean;
+  /**
+   * Default runtime-compatibility flags to publish to JSR (part of the package score).
+   * A package's own `fledgling.jsr.runtimeCompat` in its package.json overrides this.
+   */
+  runtimeCompat?: RuntimeCompat;
+}
 
 /** Persisted config, read from the `"fledgling"` key of the root package.json. */
 export interface FledglingConfig {
@@ -25,6 +41,7 @@ export interface FledglingConfig {
   pipelineDefinitionId?: string;
   vcsOrigin?: string;
   contextIds?: string[];
+  jsr?: JsrConfig;
 }
 
 export function loadConfig(root: string): FledglingConfig {

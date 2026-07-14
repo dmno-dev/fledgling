@@ -1,7 +1,8 @@
 import * as p from '@clack/prompts';
 import pc from 'picocolors';
-import { findWorkspaceRoot, discoverPackages, detectRepo, type Pkg } from './workspace.js';
-import { npmAuthCheck, listTrust, configureTrust, revokeTrust, warmNpmAuth, publishedNames } from './npm.js';
+import { findWorkspaceRoot, discoverPackages, detectRepo, type Pkg } from '../workspace.js';
+import { npmAuthCheck, checkNpmVersion, listTrust, configureTrust, revokeTrust, warmNpmAuth, publishedNames } from '../npm.js';
+import { npmArgs, selectorsOf, type Ctx } from '../args.js';
 import {
   resolveTargets,
   validateTrustSettings,
@@ -11,9 +12,9 @@ import {
   describeTrustDiff,
   describeConfig,
   applyIgnore,
-} from './core.js';
-import { loadConfig } from './config.js';
-import { hatchSpinner, hatchIntro, otpBoxReminder, reportNpmAuth, note } from './ui.js';
+} from '../core.js';
+import { loadConfig } from '../config.js';
+import { hatchSpinner, hatchIntro, otpBoxReminder, reportNpmAuth, note } from '../ui.js';
 
 /**
  * `fledgling sync` — reconcile trusted publishing across the workspace.
@@ -176,3 +177,19 @@ export async function runSync(values: Record<string, any>, selectors: string[]):
   p.outro(failed ? pc.red(`Done with ${failed} failure(s).`) : pc.green(`Synced ${fixed} package(s) 🐣`));
   return failed > 0 ? 1 : 0;
 }
+
+export const syncCommand = {
+  name: 'sync',
+  description: 'Reconcile trusted publishing on npm with your config',
+  args: npmArgs,
+  async run(ctx: Ctx) {
+    const npmErr = checkNpmVersion();
+    if (npmErr) {
+      console.error(pc.red(npmErr));
+      process.exitCode = 1;
+      return;
+    }
+    const code = await runSync(ctx.values, selectorsOf(ctx));
+    if (code) process.exitCode = code;
+  },
+};

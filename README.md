@@ -34,6 +34,7 @@ Run bare `fledgling` in a terminal and you get an interactive wizard (powered by
 | `fledgling add [packages…]` | Claim names + set up trusted publishing for the given packages |
 | `fledgling sync` | Reconcile trusted publishing on npm with your config |
 | `fledgling init` | Write the trusted-publishing config to your `package.json` |
+| `fledgling jsr [packages…]` | Claim packages on [JSR](https://jsr.io) + link the repo for OIDC publishing |
 
 ## Why
 
@@ -239,6 +240,69 @@ fledgling sync "@scope/*" # a subset
 ```
 
 Use it after changing your `fledgling` config, or to set up trust on packages that were published without it. (It uses the same config/flags as the main command.)
+
+## `fledgling jsr` — the same story on JSR
+
+[JSR](https://jsr.io) has **no "create on first publish"** — every package must already exist on jsr.io before anything (CI or a human) can publish a version to it. For a monorepo that's the exact papercut fledgling exists to remove, so `fledgling jsr` does for JSR what the main command does for npm:
+
+1. **Scaffold** — create a minimal `jsr.json` (name, version, a source `exports` entry) from each `package.json` where missing. An existing `jsr.json`/`deno.json` is authoritative and never rewritten.
+2. **Claim** — create each missing package on jsr.io via the JSR management API.
+3. **Link** — link your GitHub repo to each package, which is JSR's whole trusted-publishing setup: any workflow in the linked repo can then publish **token-lessly via OIDC** (`npx jsr publish` with `permissions: id-token: write` — no `JSR_TOKEN` secret in CI).
+4. **Sync score metadata** — reconcile each package's **description** (from `package.json`) and **runtime compatibility** (from config) to jsr.io. [JSR scores packages](https://jsr.io/docs/scoring) partly on these, and — unlike npm — they live *only* on jsr.io (the `jsr.json` manifest has no `description` field), so they can't ride along at publish time. fledgling reconciles them here, where it already holds the token; only what's changed is pushed.
+
+```sh
+npx fledgling jsr                    # plan (interactive confirm in a terminal)
+npx fledgling jsr --yes              # apply: scaffold + claim + link
+npx fledgling jsr "@scope/*" --yes   # a subset
+```
+
+It's **idempotent** — claimed packages are skipped and the repo link is re-asserted, so re-run it whenever you add a package.
+
+### Prerequisites
+
+- A **JSR scope** you're a member of (create one at [jsr.io/new](https://jsr.io/new)) — fledgling doesn't create scopes.
+- A JSR **personal access token** with **full access** in `$JSR_TOKEN` (jsr.io → Account → Tokens). A token restricted to "package publish" can publish versions but **cannot** create packages or link a repo — those are management operations. The token is used once, locally; it does **not** go into CI.
+
+JSR names always have a scope. Packages whose npm name already has one (`@scope/pkg`) map straight across; for unscoped packages, set the scope once:
+
+```jsonc
+{
+  "fledgling": {
+    "jsr": {
+      "scope": "myscope",     // JSR scope for unscoped npm names (or override with --scope)
+      "manifest": true,       // set false to never scaffold jsr.json
+      "metadata": true,       // set false to never sync description / runtime compat
+      "runtimeCompat": {      // default runtime-compatibility flags (part of the JSR score)
+        "node": true, "deno": true, "bun": true, "browser": true, "workerd": true
+      }
+    }
+  }
+}
+```
+
+The **description** is taken automatically from each package's `package.json` (collapsed to a single line and clamped to JSR's 250-char limit). **`runtimeCompat`** is deliberately *not* inferred — set it explicitly, either as the `fledgling.jsr.runtimeCompat` default above or per-package in that package's own `package.json` (a package's own value wins). Only runtimes you mark are changed; re-running reconciles drift, so edit `package.json` and re-run to update jsr.io.
+
+### Flags
+
+| Flag | Description |
+|------|-------------|
+| `-y, --yes` | Apply without prompting |
+| `--dry-run` | Print a plan without prompting (non-interactive) |
+| `--scope <scope>` | JSR scope for packages whose npm name has none (or to override it) |
+| `--repo <owner/repo>` | GitHub repo to link (default: auto-detected from git `origin`) |
+| `--token <token>` | JSR access token (prefer `$JSR_TOKEN` over the flag) |
+| `--skip-manifest` | Don't scaffold missing `jsr.json` manifests |
+| `--skip-link` | Only claim names — don't link the repo |
+| `--skip-metadata` | Don't sync score metadata (description / runtime compat) |
+
+### Good to know
+
+- **Rate limits are handled.** JSR's management API throttles bulk operations aggressively; fledgling backs off (honouring `Retry-After`) and paces itself between packages.
+- **20 new packages per scope per rolling week.** JSR hard-caps new package creation, so a larger monorepo can't be bootstrapped in one run. fledgling detects the quota, stops cleanly, and lists what's left — re-run after the reset (or ask jsr.io for a raise); it picks up where it left off.
+- **JSR's OIDC is GitHub-only** today, and there's no per-workflow/environment config — the repo link is the whole setup.
+- **JSR publishes TS source**, so scaffolded manifests point at your source entry (your `development`/`source` export condition, or `./src/index.ts`), not built output.
+
+> 🙏 Thanks to [@Saeris](https://github.com/Saeris) for the groundwork that made this feature possible — the [proposal and reference implementation](https://github.com/mirrordown/mirrordown) (including the live findings on JSR's rate limits and weekly quota) that `fledgling jsr` is built on.
 
 ## Shell completions
 
