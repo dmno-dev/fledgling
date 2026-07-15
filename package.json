@@ -34,7 +34,8 @@
     "build": "tsdown",
     "dev": "tsdown --watch",
     "typecheck": "tsc --noEmit",
-    "start": "node dist/cli.mjs"
+    "start": "node dist/cli.mjs",
+    "postinstall": "lefthook install"
   },
   "dependencies": {
     "@clack/prompts": "^1.5.1",
@@ -46,6 +47,7 @@
   "devDependencies": {
     "@types/node": "^25.0.0",
     "@varlock/bumpy": "^1.15.0",
+    "lefthook": "^2.1.10",
     "tsdown": "^0.22.2",
     "typescript": "^6.0.3"
   },
