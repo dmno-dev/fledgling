@@ -34,18 +34,20 @@
     "build": "tsdown",
     "dev": "tsdown --watch",
     "typecheck": "tsc --noEmit",
-    "start": "node dist/cli.mjs"
+    "start": "node dist/cli.mjs",
+    "postinstall": "lefthook install"
   },
   "dependencies": {
-    "@bomb.sh/tab": "^0.0.16",
     "@clack/prompts": "^1.5.1",
-    "gunshi": "^0.34.0",
+    "@gunshi/plugin-completion": "^0.36.0",
+    "gunshi": "^0.36.0",
     "picocolors": "^1.1.1",
     "tinyglobby": "^0.2.10"
   },
   "devDependencies": {
     "@types/node": "^25.0.0",
     "@varlock/bumpy": "^1.15.0",
+    "lefthook": "^2.1.10",
     "tsdown": "^0.22.2",
     "typescript": "^6.0.3"
   },

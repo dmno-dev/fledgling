@@ -1,0 +1,6 @@
+pre-push:
+  jobs:
+    - name: typecheck
+      run: bun run typecheck
+    - name: bumpy-check
+      run: bunx @varlock/bumpy check --hook pre-push

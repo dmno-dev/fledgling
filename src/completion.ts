@@ -1,102 +1,49 @@
-import t from '@bomb.sh/tab';
+import completion from '@gunshi/plugin-completion';
 import { workspacePackages } from './core.js';
 
-const FLAGS: [string, string][] = [
-  ['--yes', 'apply changes without prompting'],
-  ['--new', 'claim brand-new names not in the repo'],
-  ['--skip-publish', 'only set up trusted publishing'],
-  ['--skip-trust', 'only claim names'],
-  ['--force', 'replace an existing trusted publisher'],
-  ['--dry-run', 'print a plan without prompting'],
-  ['--placeholder-version', 'placeholder version'],
-  ['--tag', 'dist-tag for placeholders'],
-  ['--otp', 'npm 2FA one-time password'],
-  ['--otp-secret', 'TOTP secret to generate 2FA codes from'],
-  ['--registry', 'npm registry URL'],
-  ['--repo', 'trusted-publisher repo (owner/repo)'],
-  ['--workflow', 'publishing workflow filename'],
-  ['--env', 'CI environment'],
-  ['--org-id', 'CircleCI organization UUID'],
-  ['--project-id', 'CircleCI project UUID'],
-  ['--pipeline-definition-id', 'CircleCI pipeline definition UUID'],
-  ['--vcs-origin', 'CircleCI VCS origin (github/owner/repo)'],
-  ['--context-id', 'CircleCI context UUID (repeatable)'],
+type Completion = { value: string; description?: string };
+
+/** Complete workspace package names for the `packages` positional. */
+const completePackages = (): Completion[] =>
+  workspacePackages().map(p => ({ value: p.name, description: 'package' }));
+
+/** Static value completions for the enum-ish string options. */
+const completeProvider = (): Completion[] => [
+  { value: 'github' },
+  { value: 'gitlab' },
+  { value: 'circleci' },
+];
+const completePermissions = (): Completion[] => [
+  { value: 'publish' },
+  { value: 'stage' },
+  { value: 'both' },
 ];
 
-type Cmd = {
-  argument(name: string, handler: (complete: (v: string, d?: string) => void) => void, variadic?: boolean): Cmd;
-  option(flag: string, desc: string, handler?: (complete: (v: string, d?: string) => void) => void): Cmd;
+/** Handlers for the npm-shaped commands (default / add / sync). */
+const npmConfig = {
+  args: {
+    packages: { handler: completePackages },
+    provider: { handler: completeProvider },
+    permissions: { handler: completePermissions },
+  },
 };
 
-/** Wire the package-name positional + every flag onto a command. */
-function withPackageArgsAndFlags(cmd: Cmd): void {
-  cmd.argument(
-    'packages',
-    complete => {
-      for (const p of workspacePackages()) complete(p.name, 'package');
-    },
-    true,
-  );
-  cmd.option('--provider', 'CI provider', complete => {
-    complete('github', '');
-    complete('gitlab', '');
-    complete('circleci', '');
-  });
-  cmd.option('--permissions', 'trust permissions', complete => {
-    complete('publish', '');
-    complete('stage', '');
-    complete('both', '');
-  });
-  for (const [flag, desc] of FLAGS) cmd.option(flag, desc);
-}
-
-const JSR_FLAGS: [string, string][] = [
-  ['--yes', 'apply changes without prompting'],
-  ['--dry-run', 'print a plan without prompting'],
-  ['--scope', 'JSR scope for unscoped packages'],
-  ['--repo', 'GitHub repo to link (owner/repo)'],
-  ['--token', 'JSR personal access token (full access)'],
-  ['--skip-manifest', "don't scaffold missing jsr.json manifests"],
-  ['--skip-link', "only claim names — don't link the repo"],
-  ['--skip-metadata', "don't sync description / runtime compat to JSR"],
-];
-
-function defineCompletions(): void {
-  // subcommands: `add` / `sync` take package selectors + flags, `init` takes nothing
-  withPackageArgsAndFlags(t.command('add', 'claim names + set up trusted publishing') as unknown as Cmd);
-  withPackageArgsAndFlags(t.command('sync', 'reconcile trusted publishing with your config') as unknown as Cmd);
-  const jsr = t.command('jsr', 'claim packages on JSR + link the repo for OIDC') as unknown as Cmd;
-  jsr.argument(
-    'packages',
-    complete => {
-      for (const p of workspacePackages()) complete(p.name, 'package');
-    },
-    true,
-  );
-  for (const [flag, desc] of JSR_FLAGS) jsr.option(flag, desc);
-  t.command('init', 'write trusted-publishing config to package.json');
-
-  // bare `fledgling …` (default command) also accepts selectors + flags
-  withPackageArgsAndFlags(t as unknown as Cmd);
-}
-
 /**
- * Handle the hidden `complete` subcommand (shell completion).
- * `fledgling complete <shell>` prints an install script; the shell calls
- * `fledgling complete -- <words…>` to get dynamic completions.
- * Returns true if it handled the invocation.
+ * Shell completion plugin. Subcommands and every flag are derived automatically
+ * from the commands' `args` schemas; we only supply handlers for the dynamic
+ * values (workspace package names + the enum-ish `--provider` / `--permissions`).
+ *
+ * Installs via the auto-generated `complete` subcommand:
+ *   fledgling complete zsh >> ~/.zshrc   (or bash | fish | powershell)
  */
-export function maybeHandleCompletion(argv: string[]): boolean {
-  if (argv[0] !== 'complete') return false;
-  defineCompletions();
-  const arg = argv[1];
-  if (arg === '--') {
-    t.parse(argv.slice(2));
-  } else if (arg) {
-    t.setup('fledgling', 'fledgling', arg); // arg = bash | zsh | fish | powershell
-  } else {
-    console.log('Usage: fledgling complete <bash|zsh|fish|powershell>');
-    console.log('e.g.  fledgling complete zsh >> ~/.zshrc');
-  }
-  return true;
-}
+export const completionPlugin = () =>
+  completion({
+    config: {
+      entry: npmConfig,
+      subCommands: {
+        add: npmConfig,
+        sync: npmConfig,
+        jsr: { args: { packages: { handler: completePackages } } },
+      },
+    },
+  });
