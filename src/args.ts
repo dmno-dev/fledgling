@@ -9,6 +9,9 @@ export const selectorsOf = (ctx: Ctx): string[] => (ctx.positionals ?? []).slice
 
 /** The npm-shaped flag set shared by the default, `add`, and `sync` commands. */
 export const npmArgs = {
+  // positional package selectors — declared so the completion plugin can complete
+  // them; the commands still read them via `selectorsOf(ctx)` (i.e. `ctx.positionals`).
+  packages: { type: 'positional', multiple: true, required: false, description: 'Package name(s) or glob(s) to target (default: all workspace packages)' },
   // run options (per invocation)
   yes: { type: 'boolean', short: 'y', description: 'Apply changes without prompting (default: interactive / dry run)' },
   'dry-run': { type: 'boolean', description: 'Print a plan without prompts (non-interactive)' },

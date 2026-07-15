@@ -24,6 +24,7 @@ import {
 /** `fledgling jsr`'s own flags — JSR needs none of the npm-shaped `args` (no npm
  * CLI, no OTP, no provider/workflow/environment config). */
 export const jsrArgs = {
+  packages: { type: 'positional', multiple: true, required: false, description: 'Package name(s) or glob(s) to target (default: all workspace packages)' },
   yes: { type: 'boolean', short: 'y', description: 'Apply changes without prompting (default: interactive / dry run)' },
   'dry-run': { type: 'boolean', description: 'Print a plan without prompts (non-interactive)' },
   scope: { type: 'string', description: '[config] JSR scope for packages whose npm name has none (or to override it)' },

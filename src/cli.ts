@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { cli } from 'gunshi';
 import pc from 'picocolors';
-import { maybeHandleCompletion } from './completion.js';
+import { completionPlugin } from './completion.js';
 import { entryCommand, addCommand } from './commands/add.command.js';
 import { syncCommand } from './commands/sync.command.js';
 import { initCommand } from './commands/init.command.js';
@@ -12,17 +12,15 @@ const VERSION = __VERSION__;
 
 const rawArgv = process.argv.slice(2);
 
-// shell completion (`fledgling complete …`) is handled by @bomb.sh/tab, before gunshi
-if (maybeHandleCompletion(rawArgv)) {
-  process.exit(0);
-}
-
 try {
   await cli(rawArgv, entryCommand, {
     name: 'fledgling',
     version: VERSION,
     description: '🐣 Create and set up packages on npm with trusted publishing',
     subCommands: { add: addCommand, sync: syncCommand, init: initCommand, jsr: jsrCommand },
+    // shell completion (`fledgling complete <shell>`) — subcommands + flags are derived
+    // from each command's `args`; see completion.ts for the dynamic-value handlers.
+    plugins: [completionPlugin()],
     renderHeader: null, // no auto-printed banner on every run
   });
 } catch (e) {

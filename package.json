@@ -37,9 +37,9 @@
     "start": "node dist/cli.mjs"
   },
   "dependencies": {
-    "@bomb.sh/tab": "^0.0.16",
     "@clack/prompts": "^1.5.1",
-    "gunshi": "^0.34.0",
+    "@gunshi/plugin-completion": "^0.36.0",
+    "gunshi": "^0.36.0",
     "picocolors": "^1.1.1",
     "tinyglobby": "^0.2.10"
   },
