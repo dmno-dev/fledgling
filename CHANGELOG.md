@@ -2,6 +2,15 @@
 
 
 
+
+## 1.2.0
+<sub>2026-07-15</sub>
+
+- [#7](https://github.com/dmno-dev/fledgling/pull/7)  *(minor)*
+  New `fledgling jsr` command — the same first-publish story, on [JSR](https://jsr.io). Scaffolds missing `jsr.json` manifests from `package.json`, claims each package on jsr.io (JSR has no create-on-first-publish), links your GitHub repo so CI publishes token-lessly via OIDC (`npx jsr publish`, no `JSR_TOKEN` secret), and syncs the score metadata JSR only stores server-side — package **description** (from `package.json`) and **runtime compatibility** (from `fledgling.jsr.runtimeCompat` config). Idempotent (reconciles metadata drift on every run), rate-limit aware, and stops cleanly at JSR's 20-new-packages-per-week scope quota. Auth via a full-access JSR token in `$JSR_TOKEN`; configure a default scope for unscoped packages with `fledgling.jsr.scope`. Thanks to [@Saeris](https://github.com/Saeris) for the proposal and reference implementation this is built on.
+- [#9](https://github.com/dmno-dev/fledgling/pull/9)  *(patch)*
+  Upgrade gunshi to 0.36 and switch shell completion to the official `@gunshi/plugin-completion` (replacing the hand-rolled `@bomb.sh/tab` integration). Completion behaves the same — package names, `--provider`, and `--permissions` still complete — and the `packages` argument is now documented in `--help`.
+
 ## 1.1.1
 <sub>2026-07-02</sub>
 
