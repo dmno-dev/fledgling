@@ -1,6 +1,6 @@
 {
   "name": "fledgling",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "🐣 Hatch your new npm package safely - claim the name on npm and set up / sync trusted publishing settings, for one package or a whole monorepo.",
   "keywords": [
     "npm",
