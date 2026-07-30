@@ -35,7 +35,7 @@
     "dev": "tsdown --watch",
     "typecheck": "tsc --noEmit",
     "start": "node dist/cli.mjs",
-    "postinstall": "lefthook install"
+    "prepare": "lefthook install || true"
   },
   "dependencies": {
     "@clack/prompts": "^1.5.1",
