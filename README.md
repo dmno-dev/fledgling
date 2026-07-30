@@ -169,36 +169,55 @@ Running bare `npx fledgling` (no subcommand) in a terminal drops you into the sa
 | `--force` | Replace an existing trusted publisher (revoke + re-create) |
 | `--placeholder-version <v>` | Placeholder version (default: `0.0.0`) |
 | `--tag <tag>` | dist-tag for placeholders (default: `latest`) |
-| `--otp <code>` | npm 2FA one-time password, used for every npm call this run |
-| `--otp-secret <secret>` | TOTP secret to generate 2FA codes from as needed (also `$FLEDGLING_OTP_SECRET`) |
+| `--otp <code>` | *(legacy)* npm 2FA one-time password, used for every npm call this run (also `$NPM_CONFIG_OTP`) |
+| `--otp-secret <secret>` | *(legacy)* TOTP secret to generate 2FA codes from as needed (also `$FLEDGLING_OTP_SECRET`) |
 
-### 2FA / one-time passwords
+By default you don't pass either — npm handles 2FA itself via the browser. See [2FA](#2fa).
 
-npm requires 2FA to claim names and configure trusted publishing. By default fledgling
-just lets **npm handle it interactively** — it opens your browser to approve, and caches
-that approval for ~5 minutes, so one approval covers the whole run. When prompted, tick
-**"don't ask again for 5 minutes"** so it doesn't ask per-package.
+### 2FA
 
-For non-interactive runs (CI, scripts) there's no browser, so pass a code yourself:
+npm requires 2FA to claim names and configure trusted publishing, and **the browser flow is
+the normal path** — you won't pass anything to fledgling. npm kicks you out to the web to
+approve with whatever your account uses (passkey, security key, or an authenticator code),
+then caches that approval for ~5 minutes, so a single approval covers the whole run. When
+prompted, tick **"don't ask again for 5 minutes"** so it doesn't ask once per package.
+
+That's it for most people. fledgling stays out of the way — it just runs npm with the
+terminal attached and lets npm prompt.
+
+<details>
+<summary><strong>Passing a one-time code instead (legacy)</strong></summary>
+
+npm is moving away from authenticator codes in favor of WebAuthn (passkeys and security
+keys), so treat this as a fallback that's on its way out — for a shell with no browser, or
+an account still on TOTP. Note that WebAuthn can't be automated headlessly at all, so if
+your account has moved off codes, these options simply won't apply.
 
 - **`--otp <code>`** — a single one-time password, reused for every npm call in the run.
+- **`NPM_CONFIG_OTP=<code>`** — same thing as an env var. It's npm's own config env var, and
+  it keeps the code out of your process list.
 - **`--otp-secret <secret>`** — your authenticator's TOTP secret (base32); fledgling
   generates a fresh code for each npm call. Prefer the **`FLEDGLING_OTP_SECRET`** env var
   over the flag so the secret doesn't land in your shell history or process list.
 
-Pull credentials straight from a password manager — e.g. 1Password's CLI (`op`). Read the
-**generated code** with `?attribute=otp` and pass it to `--otp`:
+A single code expires in ~30s, so `--otp` / `NPM_CONFIG_OTP` may not survive a long run
+across many packages — `--otp-secret` / `FLEDGLING_OTP_SECRET` mints a fresh one per call.
+
+Pull either straight from a password manager — e.g. 1Password's CLI (`op`). The **generated
+code** comes from `?attribute=otp`:
 
 ```sh
 fledgling sync --otp "$(op read "op://Private/npm/Security/one-time password?attribute=otp")"
 ```
 
 …or read the **secret itself** — the field's value with no attribute, an `otpauth://` URI —
-into `FLEDGLING_OTP_SECRET`, and fledgling mints a fresh code for every npm call:
+into `FLEDGLING_OTP_SECRET`:
 
 ```sh
 FLEDGLING_OTP_SECRET="$(op read "op://Private/npm/Security/one-time password")" fledgling sync
 ```
+
+</details>
 
 ### Config flags
 

@@ -261,7 +261,7 @@ export async function runWizard(values: Record<string, any>, selectors: string[]
     contextIds,
     version: values['placeholder-version'] ?? '0.0.0',
     tag: values.tag,
-    otp: values.otp,
+    otp: values.otp ?? process.env.NPM_CONFIG_OTP,
     otpSecret: values['otp-secret'] ?? process.env.FLEDGLING_OTP_SECRET,
   };
 
@@ -269,7 +269,7 @@ export async function runWizard(values: Record<string, any>, selectors: string[]
   // publish, the claim's `npm publish` warms that cache for the trust write seconds
   // later, so neither re-prompts. When we're only setting up trust (no claim), nothing
   // has authenticated yet and our trust reads can't prompt — so warm the cache once
-  // here against an existing package. (Skipped when --otp / --otp-secret was passed.)
+  // here against an existing package. (Skipped when a code/secret was supplied — flag or env.)
   const interactiveAuth = apply && !settings.otp && !settings.otpSecret;
   if (interactiveAuth && (!skipTrust || !skipPublish)) p.log.info(otpBoxReminder);
   if (interactiveAuth && !skipTrust && skipPublish) {

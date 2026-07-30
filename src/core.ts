@@ -82,7 +82,9 @@ export function buildSettings(
     contextIds: values['context-id'] ?? config.contextIds,
     version: values['placeholder-version'] ?? '0.0.0',
     tag: values.tag,
-    otp: values.otp,
+    // NPM_CONFIG_OTP is npm's own env var — npm would honor it on its own, but reading it
+    // here too keeps fledgling's "do we need interactive 2FA?" checks in sync with reality.
+    otp: values.otp ?? process.env.NPM_CONFIG_OTP,
     otpSecret: values['otp-secret'] ?? process.env.FLEDGLING_OTP_SECRET,
   };
 }

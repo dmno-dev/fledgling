@@ -21,7 +21,7 @@ export const npmArgs = {
   force: { type: 'boolean', description: 'Replace an existing trusted publisher (revoke + re-create)' },
   'placeholder-version': { type: 'string', default: '0.0.0', description: 'Placeholder version to publish' },
   tag: { type: 'string', description: 'dist-tag for placeholders' },
-  otp: { type: 'string', description: 'npm 2FA one-time password (used for every npm call this run)' },
+  otp: { type: 'string', description: 'npm 2FA one-time password, used for every npm call this run (also $NPM_CONFIG_OTP)' },
   'otp-secret': { type: 'string', description: 'TOTP secret to generate 2FA codes from (use $FLEDGLING_OTP_SECRET to avoid shell history)' },
   // config — best set once in package.json "fledgling" (run `fledgling init`); flags override.
   // No gunshi defaults here, so config can fill them in.
