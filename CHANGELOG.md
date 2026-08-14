@@ -4,6 +4,13 @@
 
 
 
+
+## 1.2.2
+<sub>2026-08-14</sub>
+
+- [#12](https://github.com/dmno-dev/fledgling/pull/12)  *(patch)*
+  Read npm's own `NPM_CONFIG_OTP` env var as a fallback for `--otp`, so a 2FA code supplied that way also suppresses the interactive browser-approval prompt instead of fledgling assuming it still needs one. Docs now lead with npm's browser flow — approving with a passkey or security key is how most people will do this, and npm is moving away from authenticator codes — with the `--otp` / `--otp-secret` options kept but framed as the legacy fallback.
+
 ## 1.2.1
 <sub>2026-07-30</sub>
 
