@@ -5,11 +5,11 @@
 [![node](https://img.shields.io/node/v/fledgling)](https://www.npmjs.com/package/fledgling)
 [![license](https://img.shields.io/npm/l/fledgling?color=blue)](./LICENSE)
 
-**Create and set up packages on npm with trusted publishing.**
+**Set up npm trusted publishing — and keep it in sync — as config in your repo.**
 
 > Brought to you by [Varlock](https://varlock.dev) 🧙‍♂️🔐 — [check it out to keep your secrets out of plaintext](https://varlock.dev).
 
-`fledgling` claims your package name on npm and sets up token-less ([OIDC trusted](https://docs.npmjs.com/trusted-publishers/)) publishing — no `NPM_TOKEN`, no clicking through the npm website. It works for a single package or a whole monorepo, and it's idempotent, so you can re-run it any time you add a package.
+`fledgling` claims your package names on npm, sets up token-less ([OIDC trusted](https://docs.npmjs.com/trusted-publishers/)) publishing, and keeps that setup **in sync as it changes** — your trusted-publishing config lives in `package.json`, and fledgling reconciles npm to match it. No `NPM_TOKEN`, no clicking through the npm website. It works for a single package or a whole monorepo, and it's idempotent, so you can re-run it any time you add a package *or* change your publishing setup.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/dmno-dev/fledgling/main/images/demo.gif" alt="fledgling claiming a new package in a monorepo and setting up trusted publishing" width="760">
@@ -44,7 +44,9 @@ Setting up a new npm package the modern way is more fiddly than it should be:
 2. Then you configure the trusted publisher **per package**, by hand, on the website.
 3. In a monorepo, you do that **N times**.
 
-`fledgling` does all of it: publishes a tiny placeholder to claim each name, then configures the trusted publisher for every package via npm's own [`npm trust`](https://docs.npmjs.com/cli/v11/commands/npm-trust/). It's **idempotent** — re-run it whenever you add a package and it only does what's missing.
+And it doesn't end at setup. The trusted-publisher settings live **on npmjs.com, not in your repo** — so when you rename your release workflow, add a CI environment, or switch providers, every package silently falls out of sync and you're back to clicking through the website N times.
+
+`fledgling` fixes both halves. It publishes a tiny placeholder to claim each name, then configures the trusted publisher for every package via npm's own [`npm trust`](https://docs.npmjs.com/cli/v11/commands/npm-trust/) — and it treats the `fledgling` block in your `package.json` as the **source of truth**, so `fledgling sync` reconciles what's actually on npm back to your config whenever it changes. It's **idempotent** — re-run it whenever you add a package or touch your publishing setup, and it only does what's missing or different.
 
 ## Quick start
 
@@ -258,7 +260,7 @@ fledgling sync --yes      # skip the confirm
 fledgling sync "@scope/*" # a subset
 ```
 
-Use it after changing your `fledgling` config, or to set up trust on packages that were published without it. (It uses the same config/flags as the main command.)
+Use it whenever your publishing setup changes — you renamed the release workflow, added a CI environment, switched providers, or tweaked permissions — or to set up trust on packages that were published before fledgling existed. Change the config, run `sync`, and every package on npm matches again. (It uses the same config/flags as the main command.)
 
 ## `fledgling jsr` — the same story on JSR
 
