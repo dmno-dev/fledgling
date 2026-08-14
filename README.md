@@ -5,7 +5,7 @@
 [![node](https://img.shields.io/node/v/fledgling)](https://www.npmjs.com/package/fledgling)
 [![license](https://img.shields.io/npm/l/fledgling?color=blue)](./LICENSE)
 
-**Set up npm trusted publishing — and keep it in sync — as config in your repo.**
+**Claim package names on npm, set up trusted publishing, and keep it all in sync — as config in your repo.**
 
 > Brought to you by [Varlock](https://varlock.dev) 🧙‍♂️🔐 — [check it out to keep your secrets out of plaintext](https://varlock.dev).
 
