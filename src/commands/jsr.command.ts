@@ -62,6 +62,8 @@ export async function runJsr(values: Record<string, any>, selectors: string[]): 
 
   const spin = hatchSpinner();
   spin.start('Scanning workspace');
+  // `config.include` extras are npm-only: with no package.json in the workspace there's
+  // nothing to scaffold a jsr.json next to (and native binaries don't belong on JSR).
   const discovered = applyIgnore(discoverPackages(root), config.ignore);
   const repoInfo = detectRepo(root);
   spin.stop(`Found ${pc.bold(String(discovered.length))} package(s)${repoInfo ? ` · ${pc.dim(repoInfo.slug)}` : ''}`);

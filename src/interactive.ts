@@ -1,13 +1,13 @@
 import * as p from '@clack/prompts';
 import pc from 'picocolors';
-import { findWorkspaceRoot, discoverPackages, detectRepo, type Pkg } from './workspace.js';
+import { findWorkspaceRoot, detectRepo, type Pkg } from './workspace.js';
 import { npmAuthCheck, publishedNames, warmNpmAuth, validatePackageName, isNameAvailable } from './npm.js';
 import {
   resolveTargets,
   processTarget,
   summarize,
   describeConfig,
-  applyIgnore,
+  collectPackages,
   type Settings,
   type Reporter,
   type TargetResult,
@@ -32,7 +32,7 @@ export async function runWizard(values: Record<string, any>, selectors: string[]
   const newClaim = !!values.new;
   const spin = hatchSpinner();
   if (!newClaim) spin.start('Scanning workspace');
-  const discovered = applyIgnore(discoverPackages(root), config.ignore);
+  const discovered = collectPackages(root, config);
   const repoInfo = detectRepo(root);
   if (!newClaim) {
     spin.stop(`Found ${pc.bold(String(discovered.length))} package(s)${repoInfo ? ` · ${pc.dim(repoInfo.slug)}` : ''}`);

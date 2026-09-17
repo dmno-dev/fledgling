@@ -122,6 +122,28 @@ internal-but-published things you never want it to claim or manage trust for —
 Ignored packages are invisible to fledgling: they're left out of `add`, `sync`, `"*"`
 globs, and tab completion.
 
+### Extra packages (native binaries, etc.)
+
+Some packages are published from a repo without having their own `package.json` in the
+workspace — the classic case is per-platform native binary packages shipped as
+`optionalDependencies` and generated at build time. Add their **exact names** (no globs)
+to an `"include"` list and fledgling treats them like any discovered package — claimed,
+trusted, synced, and tab-completed:
+
+```jsonc
+{
+  "fledgling": {
+    "include": [
+      "@scope/my-tool-darwin-arm64",
+      "@scope/my-tool-linux-x64-gnu"
+    ]
+  }
+}
+```
+
+Since these have no manifest of their own, their placeholder claims carry no metadata
+beyond the name. They're npm-only: `fledgling jsr` skips them.
+
 ### Defaults
 
 | Option | Default | Notes |
