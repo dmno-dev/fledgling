@@ -1,0 +1,7 @@
+---
+'fledgling': minor
+---
+
+**`publish: true|false` replaces `permissions`.** npm grants every trusted publisher staged publishing (`npm stage`) — a config created with `--allow-publish` alone reads back with both permissions. The only real choice is whether the publisher may also `npm publish` directly, so the config key is now a boolean (`"publish": true`, default) with `--publish` / `--no-publish` flags. The old `permissions: publish | stage | both` still works (`stage` → `false`, the rest → `true`) with a deprecation note, and `fledgling init` asks the yes/no question. `sync` no longer reports every package as out of sync over the implied `createStagedPackage`.
+
+**Failed trust reads are no longer reported as "not configured".** `sync` and the wizard read each package's trust config with a captured `npm trust list --json`, which can't run npm's browser 2FA itself. When that read failed (no remembered 2FA approval), it was silently treated as an empty config — so `sync` claimed nothing was set up, and would happily offer to "fix" everything. Reads now distinguish a failure (`EOTP` etc.) from an empty config: `sync` probes right after npm's interactive approval (with a short retry for the registry's "remember for 5 minutes" grace to kick in) and stops with a clear message if the approval didn't stick; a read that fails mid-run is listed as "couldn't be read" and left alone; and the add/wizard flow fails that package instead of writing blind.

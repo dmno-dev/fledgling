@@ -1,7 +1,7 @@
 import * as p from '@clack/prompts';
 import pc from 'picocolors';
 import { findWorkspaceRoot, detectRepo } from '../workspace.js';
-import { loadConfig, writeConfig, type FledglingConfig, type Permission, type Provider } from '../config.js';
+import { loadConfig, writeConfig, resolvePublish, type FledglingConfig, type Provider } from '../config.js';
 import { hatchIntro, note } from '../ui.js';
 
 const CANCEL = Symbol('cancel');
@@ -62,17 +62,13 @@ export async function runInit(): Promise<number> {
     if (environment) config.environment = environment;
   }
 
-  const permissions = await p.select({
-    message: 'Publish permissions to grant:',
-    options: [
-      { value: 'publish', label: 'publish', hint: 'standard npm publish' },
-      { value: 'stage', label: 'staged', hint: 'npm stage — held for 2FA approval' },
-      { value: 'both', label: 'both' },
-    ],
-    initialValue: existing.permissions ?? 'publish',
+  // npm always lets a trusted publisher `npm stage`; direct `npm publish` is the choice.
+  const publish = await p.confirm({
+    message: 'Allow direct npm publish? (staged publishing — held for 2FA approval — is always allowed)',
+    initialValue: resolvePublish({}, existing).publish,
   });
-  if (p.isCancel(permissions)) return cancel();
-  config.permissions = permissions as Permission;
+  if (p.isCancel(publish)) return cancel();
+  config.publish = publish;
 
   const registry = await ask('Custom npm registry (blank for default):', existing.registry, false);
   if (registry === CANCEL) return cancel();

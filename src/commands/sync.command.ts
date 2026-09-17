@@ -1,5 +1,6 @@
 import * as p from '@clack/prompts';
 import pc from 'picocolors';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { findWorkspaceRoot, discoverPackages, detectRepo, type Pkg } from '../workspace.js';
 import { npmAuthCheck, checkNpmVersion, listTrust, configureTrust, revokeTrust, warmNpmAuth, publishedNames } from '../npm.js';
 import { npmArgs, selectorsOf, type Ctx } from '../args.js';
@@ -12,6 +13,7 @@ import {
   describeTrustDiff,
   describeConfig,
   applyIgnore,
+  trustReadHint,
 } from '../core.js';
 import { loadConfig } from '../config.js';
 import { hatchSpinner, hatchIntro, otpBoxReminder, reportNpmAuth, note } from '../ui.js';
@@ -53,7 +55,7 @@ export async function runSync(values: Record<string, any>, selectors: string[]):
   }
   let targets = resolved.targets;
 
-  const settings = buildSettings(values, config, repo, false); // apply mode
+  const settings = buildSettings(values, config, repo, false, m => p.log.warn(pc.yellow(m))); // apply mode
   settings.skipPublish = true;
   const err = validateTrustSettings(settings);
   if (err) {
@@ -103,28 +105,50 @@ export async function runSync(values: Record<string, any>, selectors: string[]):
     }
   }
 
+  // Prove the approval actually carried over before scanning: one captured read of the
+  // package we just warmed with. If npm still wants 2FA here, every read below would
+  // fail the same way — and a failed read must never be reported as "not configured".
+  // The registry's "remember for 5 minutes" grace can take a beat to become visible
+  // to a fresh request, so give it a few tries before declaring it missing.
+  let probe = listTrust(targets[0].name, settings.registry, settings);
+  for (let attempt = 1; !probe.ok && probe.code === 'EOTP' && attempt < 4; attempt++) {
+    await sleep(1500 * attempt);
+    probe = listTrust(targets[0].name, settings.registry, settings);
+  }
+  if (!probe.ok) {
+    p.cancel(pc.red(`Can't read trust settings — npm: ${probe.message}`) + pc.yellow(trustReadHint(probe.code, settings)));
+    return 1;
+  }
+
   p.log.step(`Checking trusted publishing for ${pc.bold(String(targets.length))} package(s)…`);
 
-  type Item = { t: Pkg; status: 'in-sync' | 'drift' | 'missing'; diff?: string[] };
-  const items: Item[] = targets.map(t => {
-    const entries = listTrust(t.name, settings.registry, settings);
-    if (!entries.length) return { t, status: 'missing' };
-    if (trustMatches(entries[0], settings)) return { t, status: 'in-sync' };
-    return { t, status: 'drift', diff: describeTrustDiff(entries[0], settings) };
+  type Item = { t: Pkg; status: 'in-sync' | 'drift' | 'missing' | 'unknown'; diff?: string[]; error?: string };
+  const items: Item[] = targets.map((t, i) => {
+    const read = i === 0 ? probe : listTrust(t.name, settings.registry, settings);
+    if (!read.ok) return { t, status: 'unknown', error: read.message };
+    if (!read.entries.length) return { t, status: 'missing' };
+    if (trustMatches(read.entries[0], settings)) return { t, status: 'in-sync' };
+    return { t, status: 'drift', diff: describeTrustDiff(read.entries[0], settings) };
   });
 
   const missing = items.filter(i => i.status === 'missing');
   const drift = items.filter(i => i.status === 'drift');
+  const unknown = items.filter(i => i.status === 'unknown');
   const inSync = items.filter(i => i.status === 'in-sync').length;
   const todo = [...missing, ...drift];
 
-  if (!todo.length) {
+  if (!todo.length && !unknown.length) {
     p.outro(pc.green(`All ${targets.length} package(s) are in sync 🐣`));
     return 0;
   }
 
   const statusLines: string[] = [];
   if (inSync) statusLines.push(pc.green(`✓ ${inSync} in sync`));
+  if (unknown.length) {
+    // A read that failed mid-run (2FA window lapsed, network) — not "missing", just unknown.
+    statusLines.push(pc.red(`${unknown.length} couldn't be read (left alone):`));
+    for (const i of unknown) statusLines.push(`  ${pc.red('?')} ${pc.cyan(i.t.name)} ${pc.dim(`— ${i.error}`)}`);
+  }
   if (missing.length) {
     statusLines.push(pc.yellow(`${missing.length} not configured:`));
     for (const i of missing) statusLines.push(`  ${pc.green('+')} ${pc.cyan(i.t.name)}`);
@@ -137,6 +161,11 @@ export async function runSync(values: Record<string, any>, selectors: string[]):
     }
   }
   note(statusLines.join('\n'), 'Trust status');
+
+  if (!todo.length) {
+    p.outro(pc.red(`${unknown.length} package(s) couldn't be checked — re-run once npm's 2FA is approved.`));
+    return 1;
+  }
 
   const apply = values.yes
     ? true
@@ -155,7 +184,9 @@ export async function runSync(values: Record<string, any>, selectors: string[]):
   const applyOne = (i: Item): void => {
     if (i.status === 'drift') {
       // npm allows one config per package — revoke the existing one, then re-create
-      for (const e of listTrust(i.t.name, settings.registry, settings)) {
+      const read = listTrust(i.t.name, settings.registry, settings);
+      if (!read.ok) throw new Error(`couldn't re-read its trust config to replace it (npm: ${read.message})`);
+      for (const e of read.entries) {
         if (e.id) revokeTrust(i.t.name, e.id, settings.registry, settings);
       }
     }

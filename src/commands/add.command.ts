@@ -25,7 +25,7 @@ function runPlain(values: Record<string, any>, selectors: string[]): number {
   }
 
   const dryRun = !values.yes;
-  const settings = buildSettings(values, config, repo, dryRun);
+  const settings = buildSettings(values, config, repo, dryRun, m => console.error(pc.yellow(m)));
   // Trusted publishing only makes sense once a package lives in a repo/CI. A brand-new
   // name isn't necessarily there yet — so if we can't resolve a trust config for an
   // all-new claim, skip trust (with a note) rather than blocking the name claim. Once

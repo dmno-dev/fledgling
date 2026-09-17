@@ -80,7 +80,7 @@ npx fledgling init
     "provider": "github",       // github | gitlab | circleci
     "workflow": "release.yml",  // the workflow whose job runs `npm publish`
     "environment": "publish",   // CI environment for the trusted publisher (optional)
-    "permissions": "publish"    // publish | stage | both
+    "publish": true             // allow direct `npm publish` (staged publishing is always allowed)
   }
 }
 ```
@@ -96,12 +96,14 @@ npx fledgling init
     "pipelineDefinitionId": "…",
     "vcsOrigin": "github/owner/repo",
     "contextIds": ["…"],        // optional
-    "permissions": "publish"
+    "publish": true
   }
 }
 ```
 
 Add `"registry"` to either block to target a non-default npm registry.
+
+> `"permissions": "publish" | "stage" | "both"` is the old form and still works (`stage` → `"publish": false`, the rest → `true`) with a deprecation note. npm grants every trusted publisher `npm stage`; the only real choice is direct publish.
 
 ### Excluding packages
 
@@ -128,7 +130,7 @@ globs, and tab completion.
 | `repo` | _auto-detected_ from git `origin` | override with `--repo` |
 | `workflow` | `release.yml` | the workflow whose job publishes |
 | `environment` | **none** | Optional and **unset by default** — the trusted publisher then isn't tied to a CI environment (it works, but adds no environment gate). Setting one (e.g. `publish`) is recommended for security, and `fledgling init` pre-fills it. |
-| `permissions` | `publish` | `publish`, `stage` (held for 2FA approval), or `both` |
+| `publish` | `true` | may the trusted publisher run `npm publish` directly? `false` = staged only (`npm stage`, held for 2FA approval). Staging is always allowed. |
 | `registry` | _your npm config_ | optional custom npm registry URL |
 
 **CircleCI** uses `orgId`, `projectId`, `pipelineDefinitionId`, `vcsOrigin`, and optional `contextIds` instead of `repo`/`workflow`/`environment`.
@@ -228,7 +230,7 @@ Better set once in `package.json` (see [Configuration](#configuration)); as flag
 | Flag | Config key | Default |
 |------|-----------|---------|
 | `--provider <p>` | `provider` | `github` |
-| `--permissions <p>` | `permissions` | `publish` |
+| `--publish` / `--no-publish` | `publish` | `--publish` |
 | `--registry <url>` | `registry` | _npm config_ |
 | `--repo <owner/repo>` | _(auto-detected)_ | git `origin` |
 | `--workflow <file>` | `workflow` | `release.yml` |

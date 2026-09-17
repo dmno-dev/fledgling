@@ -27,7 +27,8 @@ export const npmArgs = {
   // No gunshi defaults here, so config can fill them in.
   provider: { type: 'string', description: '[config] CI provider: github (default), gitlab, circleci' },
   registry: { type: 'string', description: '[config] npm registry URL (default: your npm config)' },
-  permissions: { type: 'string', description: '[config] permissions to grant: publish (default), stage, both' },
+  publish: { type: 'boolean', negatable: true, description: '[config] let the trusted publisher run `npm publish` directly (default); --no-publish = staged only (npm stage is always allowed)' },
+  permissions: { type: 'string', description: '[deprecated] use --publish / --no-publish' },
   repo: { type: 'string', description: '[config][github/gitlab] repo (default: auto-detected from git origin)' },
   workflow: { type: 'string', description: '[config][github/gitlab] publishing workflow filename (default: release.yml)' },
   env: { type: 'string', description: '[config][github/gitlab] CI environment (default: none)' },

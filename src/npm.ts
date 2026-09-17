@@ -4,7 +4,7 @@ import { createHmac } from 'node:crypto';
 import { writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import type { Permission, Provider } from './config.js';
+import type { Provider } from './config.js';
 
 const execFileP = promisify(execFile);
 
@@ -22,7 +22,8 @@ export interface PublishOptions extends OtpCreds {
 
 export interface TrustOptions extends OtpCreds {
   provider: Provider;
-  permissions: Permission;
+  /** Allow direct `npm publish` (staged publishing is always allowed). */
+  publish: boolean;
   registry?: string;
   dryRun: boolean;
   // github / gitlab
@@ -310,22 +311,44 @@ export function warmNpmAuth(name: string, registry?: string): boolean {
 }
 
 /**
+ * The outcome of reading a package's trust config: the entries (possibly none), or a
+ * read failure — most often `EOTP`, meaning npm needed 2FA and couldn't prompt for it.
+ * Callers must not treat a failed read as "not configured".
+ */
+export type TrustRead = { ok: true; entries: TrustEntry[] } | { ok: false; code: string; message: string };
+
+/**
  * Existing trusted-publisher configs (npm allows at most one per package).
  * `npm trust list` needs 2FA; we capture its stdout to parse the JSON, so it can't run
  * npm's interactive auth itself — warm npm's session cache first (see `warmNpmAuth`),
- * or pass `otp`. Returns `[]` if it can't read (or there's no config).
+ * or pass `otp`. A read that fails (no cached 2FA, offline, …) is reported as such —
+ * `ok: false` — rather than as an empty config.
  */
-export function listTrust(name: string, registry?: string, creds?: OtpCreds): TrustEntry[] {
+export function listTrust(name: string, registry?: string, creds?: OtpCreds): TrustRead {
+  let out: string;
   try {
-    const out = execFileSync('npm', withOtp(withRegistry(['trust', 'list', name, '--json'], registry), nextOtp(creds)), {
+    out = execFileSync('npm', withOtp(withRegistry(['trust', 'list', name, '--json'], registry), nextOtp(creds)), {
       stdio: ['ignore', 'pipe', 'ignore'],
       encoding: 'utf8',
     }).trim();
-    if (!out) return [];
+  } catch (e) {
+    // With --json, npm prints its error as JSON on stdout: { error: { code, summary } }.
+    const stdout = String((e as { stdout?: string }).stdout ?? '').trim();
+    try {
+      const err = JSON.parse(stdout)?.error;
+      if (err?.code) return { ok: false, code: err.code, message: err.summary ?? err.code };
+    } catch {
+      /* not JSON */
+    }
+    return { ok: false, code: 'UNKNOWN', message: (e as Error).message };
+  }
+  if (!out) return { ok: true, entries: [] };
+  try {
     const parsed = JSON.parse(out); // npm emits a bare object (or array) of { id, type, permissions }
-    return Array.isArray(parsed) ? parsed : [parsed];
+    if (parsed?.error) return { ok: false, code: parsed.error.code ?? 'UNKNOWN', message: parsed.error.summary ?? '' };
+    return { ok: true, entries: Array.isArray(parsed) ? parsed : [parsed] };
   } catch {
-    return [];
+    return { ok: false, code: 'EPARSE', message: 'could not parse `npm trust list --json` output' };
   }
 }
 
@@ -359,8 +382,9 @@ export function configureTrust(name: string, opts: TrustOptions): void {
     args.push(opts.provider === 'gitlab' ? '--project' : '--repo', opts.repo!);
     if (opts.env) args.push('--env', opts.env);
   }
-  if (opts.permissions === 'publish' || opts.permissions === 'both') args.push('--allow-publish');
-  if (opts.permissions === 'stage' || opts.permissions === 'both') args.push('--allow-stage-publish');
+  // npm grants staged publishing to every trusted publisher; direct publish is the choice.
+  if (opts.publish) args.push('--allow-publish');
+  args.push('--allow-stage-publish');
   withRegistry(args, opts.registry);
   withOtp(args, nextOtp(opts));
   args.push(opts.dryRun ? '--dry-run' : '-y');
