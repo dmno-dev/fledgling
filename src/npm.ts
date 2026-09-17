@@ -352,11 +352,30 @@ export function listTrust(name: string, registry?: string, creds?: OtpCreds): Tr
   }
 }
 
-/** Publish a package.json-only placeholder from a throwaway dir (claims the name). */
+/** README shipped with the placeholder, so the npm page says what it is and where it came from. */
+export function placeholderReadme(manifest: Record<string, any>): string {
+  const repo = typeof manifest.repository === 'string' ? manifest.repository : manifest.repository?.url;
+  const home = manifest.homepage ?? repo?.replace(/^git\+/, '').replace(/\.git$/, '');
+  return [
+    `# ${manifest.name}`,
+    '',
+    `🐣 This package name has been claimed with [fledgling](https://github.com/dmno-dev/fledgling)${home ? ` for [${home}](${home})` : ''}, and a real release will land here soon.`,
+    '',
+    'This is a placeholder — there is nothing to install yet.',
+    '',
+    '---',
+    '',
+    'Want to claim a name of your own? Run `npx fledgling add <name> --new --yes` — it reserves the name on npm and can set up token-less (OIDC trusted) publishing for when you are ready.',
+    '',
+  ].join('\n');
+}
+
+/** Publish a package.json + README placeholder from a throwaway dir (claims the name). */
 export function publishPlaceholder(manifest: Record<string, any>, opts: PublishOptions): void {
   const dir = mkdtempSync(join(tmpdir(), 'fledgling-'));
   try {
     writeFileSync(join(dir, 'package.json'), JSON.stringify(manifest, null, 2) + '\n');
+    writeFileSync(join(dir, 'README.md'), placeholderReadme(manifest));
     const args = ['publish', '--access', 'public'];
     if (opts.dryRun) args.push('--dry-run');
     if (opts.tag) args.push(`--tag=${opts.tag}`);
