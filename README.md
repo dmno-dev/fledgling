@@ -9,11 +9,35 @@
 
 > Brought to you by [Varlock](https://varlock.dev) 🧙‍♂️🔐 — [check it out to keep your secrets out of plaintext](https://varlock.dev).
 
-`fledgling` claims your package names on npm, sets up token-less ([OIDC trusted](https://docs.npmjs.com/trusted-publishers/)) publishing, and keeps that setup **in sync as it changes** — your trusted-publishing config lives in `package.json`, and fledgling reconciles npm to match it. No `NPM_TOKEN`, no clicking through the npm website. It works for a single package or a whole monorepo, and it's idempotent, so you can re-run it any time you add a package *or* change your publishing setup.
+`fledgling` does two things, and you can use either one on its own:
+
+1. **Claims package names on npm** — one command, from any directory, no repo or `package.json` needed. Got a name for that idea? Grab it before someone else does.
+2. **Sets up token-less ([OIDC trusted](https://docs.npmjs.com/trusted-publishers/)) publishing and keeps it in sync** — your trusted-publishing config lives in `package.json`, and fledgling reconciles npm to match it. No `NPM_TOKEN`, no clicking through the npm website.
+
+It works for a single package or a whole monorepo, and it's idempotent, so you can re-run it any time you add a package *or* change your publishing setup.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/dmno-dev/fledgling/main/images/demo.gif" alt="fledgling claiming a new package in a monorepo and setting up trusted publishing" width="760">
 </p>
+
+## Just claim a name
+
+Have a name you want to lock down? You don't need a repo, a `package.json`, or any config — run this from your home folder or an empty directory:
+
+```sh
+npm login                                        # once (2FA required)
+npx fledgling add my-great-new-idea --new --yes  # done — the name is yours
+```
+
+That publishes a tiny `0.0.0` placeholder under your account (no code — just a `package.json` and a README saying the name is reserved), which is all npm needs to reserve the name. Scoped names (`@scope/thing`) work too, and you can pass several at once. When the package later lives in a repo, `npx fledgling sync` wires up trusted publishing — or never bother, and just `npm publish` over it like any other package.
+
+Already in a repo and only want the names, not the trust setup? Add `--skip-trust`:
+
+```sh
+npx fledgling add "*" --skip-trust --yes         # claim every package in the workspace
+```
+
+## Everything it does
 
 Designed to be run with `npx` (or `bunx` / `pnpm dlx`):
 
@@ -137,7 +161,8 @@ Precedence is **CLI flag → `fledgling` config → built-in default**.
 
 ### Just want to claim names?
 
-To skip trusted publishing entirely and only reserve package names, you can:
+See [Just claim a name](#just-claim-a-name) above. To skip trusted publishing entirely and only reserve package names, you can:
+- pass **`--new`** with a name that isn't in a repo (trust is skipped automatically),
 - pass **`--skip-trust`** for a single run,
 - decline the wizard's "Set up trusted publishing?" prompt, or
 - set **`"trust": false`** in your `fledgling` config to make it the default.
@@ -243,7 +268,7 @@ Better set once in `package.json` (see [Configuration](#configuration)); as flag
 
 For each target package:
 
-1. **Claim** — if the name isn't on npm yet, publish a `package.json`-only placeholder (`0.0.0`, no code) to reserve it.
+1. **Claim** — if the name isn't on npm yet, publish a placeholder (`0.0.0`, no code — just a `package.json` and a README noting the name was claimed with fledgling) to reserve it.
 2. **Trust** — if there's no trusted publisher configured, set one up for your CI provider via `npm trust` (or replace an existing one with `--force`). Supports **GitHub, GitLab, and CircleCI**, with every option `npm trust` accepts.
 
 Both steps are skipped when already done. Placeholders are packed from a throwaway temp dir, so your real `package.json` files are never touched.
