@@ -10,7 +10,7 @@ import {
   type TrustOptions,
   type TrustEntry,
 } from './npm.js';
-import { loadConfig, type Permission, type Provider, type FledglingConfig } from './config.js';
+import { loadConfig, resolvePublish, type Provider, type FledglingConfig } from './config.js';
 
 export interface Settings {
   dryRun: boolean;
@@ -22,7 +22,8 @@ export interface Settings {
   otp?: string;
   otpSecret?: string;
   provider: Provider;
-  permissions: Permission;
+  /** Allow direct `npm publish` (npm always allows `npm stage`). */
+  publish: boolean;
   registry?: string;
   // github / gitlab
   repo?: string;
@@ -57,20 +58,26 @@ export function validateTrustSettings(s: Settings): string | null {
   return null;
 }
 
-/** Resolve a setting with precedence: CLI flag → fledgling config → built-in default. */
+/**
+ * Resolve a setting with precedence: CLI flag → fledgling config → built-in default.
+ * `warn` receives the deprecation note if the old `permissions` key decided `publish`.
+ */
 export function buildSettings(
   values: Record<string, any>,
   config: FledglingConfig,
   repo: string | undefined,
   dryRun: boolean,
+  warn: (msg: string) => void = () => {},
 ): Settings {
+  const pub = resolvePublish(values, config);
+  if (pub.deprecated) warn(pub.deprecated);
   return {
     dryRun,
     skipPublish: !!values['skip-publish'],
     skipTrust: !!values['skip-trust'] || config.trust === false,
     force: !!values.force,
     provider: (values.provider ?? config.provider ?? 'github') as Provider,
-    permissions: (values.permissions ?? config.permissions ?? 'publish') as Permission,
+    publish: pub.publish,
     registry: values.registry ?? config.registry,
     repo,
     workflow: values.workflow ?? config.workflow ?? 'release.yml',
@@ -92,7 +99,7 @@ export function buildSettings(
 export function toTrustOptions(s: Settings): TrustOptions {
   return {
     provider: s.provider,
-    permissions: s.permissions,
+    publish: s.publish,
     registry: s.registry,
     otp: s.otp,
     otpSecret: s.otpSecret,
@@ -110,19 +117,21 @@ export function toTrustOptions(s: Settings): TrustOptions {
 
 // --- drift detection: compare an existing remote config to the desired settings ---
 
-const PERMS: Record<Permission, string[]> = {
-  publish: ['createPackage'],
-  stage: ['createStagedPackage'],
-  both: ['createPackage', 'createStagedPackage'],
-};
 const eq = (a: string | undefined, b: string | undefined) => (a || undefined) === (b || undefined);
 const sameList = (a: string[] | undefined, b: string[] | undefined) =>
   [...(a ?? [])].sort().join(',') === [...(b ?? [])].sort().join(',');
+/**
+ * Can this config publish directly? npm grants `createStagedPackage` to every trusted
+ * publisher (a config made with `--allow-publish` alone reads back with both), so the
+ * only thing to compare is whether `createPackage` is there.
+ */
+const canPublish = (e: TrustEntry): boolean => !!e.permissions?.includes('createPackage');
+const yesNo = (b: boolean) => (b ? 'yes' : 'no');
 
 /** Does an existing trusted-publisher config match the desired settings? */
 export function trustMatches(e: TrustEntry, s: Settings): boolean {
   if (e.type !== s.provider) return false;
-  if (!sameList(e.permissions, PERMS[s.permissions])) return false;
+  if (canPublish(e) !== s.publish) return false;
   if (s.provider === 'circleci') {
     return (
       eq(e.orgId, s.orgId) &&
@@ -145,9 +154,7 @@ export function describeTrustDiff(e: TrustEntry, s: Settings): string[] {
     `${pc.dim(key)} ${fmt(from, pc.red)} ${pc.dim('→')} ${fmt(to, pc.green)}`;
   const d: string[] = [];
   if (e.type !== s.provider) d.push(delta('provider', e.type, s.provider));
-  if (!sameList(e.permissions, PERMS[s.permissions])) {
-    d.push(delta('permissions', (e.permissions ?? []).join('+'), s.permissions));
-  }
+  if (canPublish(e) !== s.publish) d.push(delta('publish', yesNo(canPublish(e)), yesNo(s.publish)));
   if (s.provider === 'circleci') {
     if (!eq(e.orgId, s.orgId)) d.push(delta('org-id', e.orgId, s.orgId));
     if (!eq(e.projectId, s.projectId)) d.push(delta('project-id', e.projectId, s.projectId));
@@ -165,14 +172,14 @@ export function describeTrustDiff(e: TrustEntry, s: Settings): string[] {
 
 export type TrustView = Pick<
   Settings,
-  'provider' | 'permissions' | 'registry' | 'repo' | 'workflow' | 'env' | 'orgId' | 'projectId' | 'pipelineDefinitionId' | 'vcsOrigin' | 'contextIds'
+  'provider' | 'publish' | 'registry' | 'repo' | 'workflow' | 'env' | 'orgId' | 'projectId' | 'pipelineDefinitionId' | 'vcsOrigin' | 'contextIds'
 >;
 
 /** The desired trusted-publishing config, formatted for display. */
 export function describeConfig(c: TrustView): string {
   const v = (val?: string) => (val ? pc.cyan(val) : pc.dim('(none)'));
   const row = (label: string, val?: string) => `${`${label}:`.padEnd(12)} ${v(val)}`;
-  const lines = [row('provider', c.provider), row('permissions', c.permissions)];
+  const lines = [row('provider', c.provider), row('publish', c.publish ? 'yes (direct + staged)' : 'no (staged only)')];
   if (c.provider === 'circleci') {
     lines.push(
       row('org-id', c.orgId),
@@ -258,6 +265,17 @@ export function resolveTargets(discovered: Pkg[], selectors: string[], isNew: bo
   return { targets };
 }
 
+/**
+ * What to do about a failed trust read. `EOTP` means npm needed 2FA and couldn't prompt
+ * (our reads capture stdout) — the browser approval either wasn't ticked to be remembered
+ * or has lapsed.
+ */
+export function trustReadHint(code: string, s: Pick<Settings, 'otp' | 'otpSecret'>): string {
+  if (code !== 'EOTP') return '';
+  if (s.otp || s.otpSecret) return ' — the one-time code was rejected; check --otp / --otp-secret';
+  return ` — re-run and tick "don't ask again for 5 minutes" when npm opens the browser, or pass --otp`;
+}
+
 /** Claim + trust one package. Reports progress; returns a structured result. */
 export function processTarget(t: Pkg, s: Settings, report: Reporter): TargetResult {
   const result: TargetResult = { name: t.name, claim: 'na', trust: 'na' };
@@ -302,7 +320,15 @@ export function processTarget(t: Pkg, s: Settings, report: Reporter): TargetResu
       // Only packages that already existed can have a trust config — a name we just
       // claimed starts empty, so skip the read (which needs npm's warmed 2FA) for it.
       // The write below relies on npm's own interactive 2FA; dry-run is best-effort.
-      const existing = existedBefore ? listTrust(t.name, s.registry, s) : [];
+      const read = existedBefore ? listTrust(t.name, s.registry, s) : { ok: true as const, entries: [] };
+      if (!read.ok && !s.dryRun) {
+        // We can't tell whether a config exists, so don't write blind (npm allows one
+        // per package, and --force needs the id to revoke). Say why, and stop here.
+        report.fail(`${t.name} — couldn't read its trust config (npm: ${read.message})${trustReadHint(read.code, s)}`);
+        result.trust = 'fail';
+        return result;
+      }
+      const existing = read.ok ? read.entries : [];
       if (existing.length && !s.force) {
         report.skip(`${t.name} — trust already configured (use --force to replace)`);
         result.trust = 'skip';

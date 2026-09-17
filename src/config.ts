@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type { RuntimeCompat } from './jsr.js';
 
-/** npm trusted-publisher permissions to grant. */
+/** @deprecated Old `permissions` values — see `resolvePublish`. */
 export type Permission = 'publish' | 'stage' | 'both';
 
 export type Provider = 'github' | 'gitlab' | 'circleci';
@@ -29,6 +29,12 @@ export interface FledglingConfig {
   /** Package names/globs to exclude from fledgling entirely (besides `"private": true`). */
   ignore?: string[];
   provider?: Provider;
+  /**
+   * May the trusted publisher run `npm publish` directly? (default: true). npm always
+   * allows `npm stage` for a trusted publisher; this is the only choice npm offers.
+   */
+  publish?: boolean;
+  /** @deprecated Use `publish`. `publish`/`both` → true, `stage` → false. */
   permissions?: Permission;
   /** custom npm registry (defaults to the configured/default registry) */
   registry?: string;
@@ -42,6 +48,31 @@ export interface FledglingConfig {
   vcsOrigin?: string;
   contextIds?: string[];
   jsr?: JsrConfig;
+}
+
+/**
+ * Resolve the direct-publish choice: `--publish`/`--no-publish` → config `publish` → the
+ * deprecated `permissions` (flag or config) → true. Returns a deprecation note when the
+ * old key decided it, for the caller to surface.
+ */
+export function resolvePublish(
+  values: { publish?: boolean; permissions?: string },
+  config: Pick<FledglingConfig, 'publish' | 'permissions'>,
+): { publish: boolean; deprecated?: string } {
+  if (values.publish !== undefined) return { publish: values.publish };
+  if (config.publish !== undefined) return { publish: config.publish };
+  const legacy = values.permissions ?? config.permissions;
+  if (legacy !== undefined) {
+    const publish = legacy !== 'stage';
+    const where = values.permissions !== undefined ? '--permissions' : '`"permissions"` in your fledgling config';
+    return {
+      publish,
+      deprecated:
+        `${where} is deprecated — npm always allows staged publishing, so the only choice is direct publish. ` +
+        `Use ${publish ? '`"publish": true` (or --publish)' : '`"publish": false` (or --no-publish)'} instead.`,
+    };
+  }
+  return { publish: true };
 }
 
 export function loadConfig(root: string): FledglingConfig {

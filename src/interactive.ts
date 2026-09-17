@@ -13,7 +13,7 @@ import {
   type TargetResult,
   type TrustView,
 } from './core.js';
-import { loadConfig, type Permission, type Provider } from './config.js';
+import { loadConfig, resolvePublish, type Provider } from './config.js';
 import { hatchSpinner, hatchIntro, cmd, otpBoxReminder, reportNpmAuth, note } from './ui.js';
 
 const cancelled = (v: unknown): boolean => p.isCancel(v);
@@ -172,7 +172,9 @@ export async function runWizard(values: Record<string, any>, selectors: string[]
   const skipPublish = onlyTrust;
   let skipTrust = !!values['skip-trust'] || config.trust === false;
   const provider = (values.provider ?? config.provider ?? 'github') as Provider;
-  const permissions = (values.permissions ?? config.permissions ?? 'publish') as Permission;
+  const pub = resolvePublish(values, config);
+  if (pub.deprecated) p.log.warn(pc.yellow(pub.deprecated));
+  const publish = pub.publish;
   let repo: string | undefined = values.repo ?? repoInfo?.slug;
   const workflow: string = values.workflow ?? config.workflow ?? 'release.yml';
   const env: string | undefined = values.env ?? config.environment;
@@ -228,7 +230,7 @@ export async function runWizard(values: Record<string, any>, selectors: string[]
     'Plan',
   );
   if (!skipTrust) {
-    const view: TrustView = { provider, permissions, registry, repo, workflow, env, orgId, projectId, pipelineDefinitionId, vcsOrigin, contextIds };
+    const view: TrustView = { provider, publish, registry, repo, workflow, env, orgId, projectId, pipelineDefinitionId, vcsOrigin, contextIds };
     note(
       `${describeConfig(view)}\n\n${pc.italic(pc.dim('Change these with `fledgling init`'))}`,
       'Trusted publishing settings',
@@ -249,7 +251,7 @@ export async function runWizard(values: Record<string, any>, selectors: string[]
     skipTrust,
     force: !!values.force,
     provider,
-    permissions,
+    publish,
     registry,
     repo,
     workflow,
