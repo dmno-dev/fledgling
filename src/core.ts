@@ -231,10 +231,25 @@ export function applyIgnore(pkgs: Pkg[], ignore?: string[]): Pkg[] {
   return pkgs.filter(p => !res.some(re => re.test(p.name)));
 }
 
+/**
+ * The full package list: workspace discovery, minus `ignore`, plus `include` — extra
+ * names with no package.json of their own (e.g. per-platform native binary packages
+ * shipped as optional deps). Extras are synthesized at the workspace root with a bare
+ * manifest; being explicit, they are not subject to `ignore`.
+ */
+export function collectPackages(root: string, config: FledglingConfig): Pkg[] {
+  const pkgs = applyIgnore(discoverPackages(root), config.ignore);
+  const seen = new Set(pkgs.map(p => p.name));
+  for (const name of config.include ?? []) {
+    if (!seen.has(name)) (seen.add(name), pkgs.push({ name, dir: root, manifest: { name } }));
+  }
+  return pkgs;
+}
+
 /** Package names in the current workspace — used for tab completion and the wizard. */
 export function workspacePackages(): Pkg[] {
   const root = findWorkspaceRoot();
-  return applyIgnore(discoverPackages(root), loadConfig(root).ignore);
+  return collectPackages(root, loadConfig(root));
 }
 
 export interface ResolveResult {

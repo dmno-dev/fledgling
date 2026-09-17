@@ -1,7 +1,7 @@
 import * as p from '@clack/prompts';
 import pc from 'picocolors';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { findWorkspaceRoot, discoverPackages, detectRepo, type Pkg } from '../workspace.js';
+import { findWorkspaceRoot, detectRepo, type Pkg } from '../workspace.js';
 import { npmAuthCheck, checkNpmVersion, listTrust, configureTrust, revokeTrust, warmNpmAuth, publishedNames } from '../npm.js';
 import { npmArgs, selectorsOf, type Ctx } from '../args.js';
 import {
@@ -12,7 +12,7 @@ import {
   trustMatches,
   describeTrustDiff,
   describeConfig,
-  applyIgnore,
+  collectPackages,
   trustReadHint,
 } from '../core.js';
 import { loadConfig } from '../config.js';
@@ -42,7 +42,7 @@ export async function runSync(values: Record<string, any>, selectors: string[]):
   // Reports "logged in as…" and warns if 2FA is off (trust writes would 403).
   reportNpmAuth(auth);
 
-  const discovered = applyIgnore(discoverPackages(root), config.ignore);
+  const discovered = collectPackages(root, config);
 
   const resolved = resolveTargets(discovered, selectors, false, root);
   if (resolved.error) {

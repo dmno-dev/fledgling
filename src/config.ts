@@ -28,6 +28,12 @@ export interface FledglingConfig {
   trust?: boolean;
   /** Package names/globs to exclude from fledgling entirely (besides `"private": true`). */
   ignore?: string[];
+  /**
+   * Extra package names to manage that have no package.json in the workspace —
+   * e.g. per-platform native binary packages published as optional dependencies.
+   * Exact names (no globs), treated like discovered packages everywhere but JSR.
+   */
+  include?: string[];
   provider?: Provider;
   /**
    * May the trusted publisher run `npm publish` directly? (default: true). npm always

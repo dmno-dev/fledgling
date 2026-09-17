@@ -1,7 +1,7 @@
 import pc from 'picocolors';
-import { findWorkspaceRoot, discoverPackages, detectRepo } from '../workspace.js';
+import { findWorkspaceRoot, detectRepo } from '../workspace.js';
 import { npmAuthCheck, checkNpmVersion } from '../npm.js';
-import { resolveTargets, processTarget, summarize, validateTrustSettings, buildSettings, applyIgnore, type Reporter } from '../core.js';
+import { resolveTargets, processTarget, summarize, validateTrustSettings, buildSettings, collectPackages, type Reporter } from '../core.js';
 import { loadConfig } from '../config.js';
 import { twoFactorDisabledWarning } from '../ui.js';
 import { runWizard } from '../interactive.js';
@@ -11,7 +11,7 @@ import { npmArgs, selectorsOf, type Ctx } from '../args.js';
 function runPlain(values: Record<string, any>, selectors: string[]): number {
   const root = findWorkspaceRoot();
   const config = loadConfig(root);
-  const discovered = applyIgnore(discoverPackages(root), config.ignore);
+  const discovered = collectPackages(root, config);
   const repo = values.repo ?? detectRepo(root)?.slug;
 
   const resolved = resolveTargets(discovered, selectors, !!values.new, root);
