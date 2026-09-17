@@ -35,6 +35,7 @@ Run bare `fledgling` in a terminal and you get an interactive wizard (powered by
 | `fledgling sync` | Reconcile trusted publishing on npm with your config |
 | `fledgling init` | Write the trusted-publishing config to your `package.json` |
 | `fledgling jsr [packages…]` | Claim packages on [JSR](https://jsr.io) + link the repo for OIDC publishing |
+| `fledgling pypi <names…>` | Claim names on [PyPI](https://pypi.org) + print the trusted-publishing checklist |
 
 ## Why
 
@@ -348,6 +349,53 @@ The **description** is taken automatically from each package's `package.json` (c
 - **JSR publishes TS source**, so scaffolded manifests point at your source entry (your `development`/`source` export condition, or `./src/index.ts`), not built output.
 
 > 🙏 Thanks to [@Saeris](https://github.com/Saeris) for the groundwork that made this feature possible — the [proposal and reference implementation](https://github.com/mirrordown/mirrordown) (including the live findings on JSR's rate limits and weekly quota) that `fledgling jsr` is built on.
+
+## `fledgling pypi` — claim the name, then a checklist
+
+PyPI is the odd one out, and it's worth saying plainly why:
+
+- **The good news:** PyPI has no create-on-first-publish problem. A [pending publisher](https://docs.pypi.org/trusted-publishers/creating-a-project-through-oidc/) can be registered for a project that doesn't exist yet, and the first OIDC publish creates it. No placeholder needed.
+- **The bad news:** there is **no API** for any of it. Every publisher-management route on PyPI is a session + CSRF protected HTML form; the only machine endpoints (`/_/oidc/audience`, `/_/oidc/mint-token`) *mint* tokens, they don't manage publishers. There's no `npm trust` equivalent to call.
+
+So `fledgling pypi` does the half that can be automated, and makes the other half as short as possible:
+
+1. **Claim** — upload a minimal placeholder sdist for each name. This is the part that actually matters: a pending publisher **does not reserve the name**, so until something is published, anyone can take it out from under you (which invalidates your pending publisher).
+2. **Hand off** — print every field value PyPI's form wants, and the exact page for each package.
+
+```sh
+npx fledgling pypi my-great-new-idea                    # plan (interactive confirm in a terminal)
+npx fledgling pypi pkg-one pkg-two --yes                # apply
+npx fledgling pypi my-pkg --test --yes                  # rehearse against TestPyPI first
+```
+
+Names are passed explicitly rather than discovered from `pyproject.toml` — claiming a name is most useful *before* there's a package to discover.
+
+### Requirements
+
+- A **PyPI API token** in `$PYPI_TOKEN` ([create one](https://pypi.org/manage/account/token/)). Used once, locally; it does **not** go into CI — that's the whole point of the trusted publisher you set up afterwards.
+- Your PyPI account needs a **verified email** and **2FA** — warehouse rejects token uploads without both.
+- No Python toolchain. fledgling builds the sdist itself (a gzipped tar holding one `PKG-INFO`); PyPI reads the metadata from the upload form fields.
+
+### Flags
+
+| Flag | Description |
+|------|-------------|
+| `-y, --yes` | Apply without prompting |
+| `--dry-run` | Print a plan without prompting (non-interactive) |
+| `--token <token>` | PyPI API token (prefer `$PYPI_TOKEN` over the flag) |
+| `--placeholder-version <v>` | Placeholder version (default `0.0.0`) |
+| `--summary <text>` | Summary for the placeholder release |
+| `--test` | Use TestPyPI instead of PyPI |
+| `--repository-url <url>` / `--index-url <url>` | Point at a custom index |
+| `--repo <owner/repo>` | Repo for the checklist (default: auto-detected from git `origin`) |
+| `--workflow <file>` / `--env <name>` | Workflow filename / CI environment for the checklist |
+
+### Good to know
+
+- **Availability checks are best-effort.** fledgling asks PyPI's JSON API whether a name exists, but PyPI also rejects names that merely *resemble* an existing one — it strips `.`, `-`, `_` and reads `l`/`i` as `1` and `o` as `0`, so `my-lib` and `myl1b` collide. Stdlib names and typosquats are blocked too. None of that is queryable up front; you find out on upload.
+- **Claiming raises the cap.** Pending publishers are limited to **3 per account**. Once a name is claimed the project exists, so you configure it on its own project settings page instead — and there's no limit on those.
+- **PEP 625 naming.** PyPI indexes by the [PEP 503](https://peps.python.org/pep-0503/) normalized name, so `My.Pkg`, `my_pkg` and `my--pkg` are one project; fledgling normalizes, dedupes, and names the sdist the way warehouse demands.
+- **Placeholder versions are plain dotted numbers.** Anything PEP 440 would rewrite (`1.0-alpha` → `1.0a0`) is rejected up front, because warehouse builds the expected filename from the canonicalized version and the mismatch produces a baffling error.
 
 ## Shell completions
 
