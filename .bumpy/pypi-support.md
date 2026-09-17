@@ -1,0 +1,5 @@
+---
+'fledgling': minor
+---
+
+New `fledgling pypi` command — claim package names on [PyPI](https://pypi.org), then a checklist for the rest. PyPI is the odd one out: it has no create-on-first-publish problem (a *pending publisher* can be registered for a project that doesn't exist), but it also has **no API** for trusted publishers — every publisher-management route is a CSRF-protected web form, so there's no `npm trust` equivalent to call. So fledgling does the half that can be automated, which is also the half that matters: a pending publisher does **not** reserve the name, and until something is published anyone can take it. fledgling uploads a minimal placeholder sdist per name — built in-process, no Python toolchain needed — then prints every value PyPI's form wants plus the exact page for each package. Claiming also sidesteps PyPI's 3-pending-publisher cap, since a project that exists is configured on its own settings page. Auth via a PyPI API token in `$PYPI_TOKEN` (used locally, never in CI); rehearse against TestPyPI with `--test`.

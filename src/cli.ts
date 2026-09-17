@@ -6,6 +6,7 @@ import { entryCommand, addCommand } from './commands/add.command.js';
 import { syncCommand } from './commands/sync.command.js';
 import { initCommand } from './commands/init.command.js';
 import { jsrCommand } from './commands/jsr.command.js';
+import { pypiCommand } from './commands/pypi.command.js';
 
 declare const __VERSION__: string;
 const VERSION = __VERSION__;
@@ -17,7 +18,7 @@ try {
     name: 'fledgling',
     version: VERSION,
     description: '🐣 Create and set up packages on npm with trusted publishing',
-    subCommands: { add: addCommand, sync: syncCommand, init: initCommand, jsr: jsrCommand },
+    subCommands: { add: addCommand, sync: syncCommand, init: initCommand, jsr: jsrCommand, pypi: pypiCommand },
     // shell completion (`fledgling complete <shell>`) — subcommands + flags are derived
     // from each command's `args`; see completion.ts for the dynamic-value handlers.
     plugins: [completionPlugin()],
